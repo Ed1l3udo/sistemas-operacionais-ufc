@@ -26,7 +26,7 @@ $(TEST_BIN): tests/test_scheduler.c src/input.c src/scheduler.c src/output.c inc
 test: $(BIN) $(TEST_BIN)
 	./$(TEST_BIN)
 	sh tests/test_cli.sh
-	@if command -v node >/dev/null 2>&1; then node --test tests/test_api.mjs; else echo "Node.js ausente: teste da API ignorado"; fi
+	@if [ -f tests/test_api.mjs ] && command -v node >/dev/null 2>&1; then node --test tests/test_api.mjs; else echo "Teste da API ainda indisponível ou Node.js ausente"; fi
 
 sanitize: clean
 	$(MAKE) CFLAGS="-std=c17 -Wall -Wextra -Wpedantic -Werror -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer" $(TEST_BIN)
@@ -39,4 +39,3 @@ web: $(BIN)
 
 clean:
 	rm -rf $(BUILD_DIR)
-
