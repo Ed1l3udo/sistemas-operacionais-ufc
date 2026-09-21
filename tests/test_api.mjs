@@ -42,6 +42,21 @@ function request(method, pathname, body, contentType = 'application/json') {
   });
 }
 
+function requestText(pathname) {
+  return new Promise((resolve, reject) => {
+    http.get({ host: '127.0.0.1', port, path: pathname }, (response) => {
+      const chunks = [];
+      response.on('data', (chunk) => chunks.push(chunk));
+      response.on('end', () => resolve({
+        status: response.statusCode,
+        type: response.headers['content-type'],
+        csp: response.headers['content-security-policy'],
+        text: Buffer.concat(chunks).toString('utf8'),
+      }));
+    }).on('error', reject);
+  });
+}
+
 before(async () => {
   server = createAppServer({ binaryPath: BINARY });
   await new Promise((resolve, reject) => {
@@ -102,4 +117,12 @@ test('API estrutura erros de transporte e do motor', async () => {
   });
   assert.equal(invalidAlgorithm.status, 400);
   assert.equal(invalidAlgorithm.body.error.details.field, 'algorithms');
+});
+
+test('servidor entrega a interface com cabeçalhos seguros', async () => {
+  const response = await requestText('/');
+  assert.equal(response.status, 200);
+  assert.match(response.type, /^text\/html/);
+  assert.match(response.csp, /default-src 'self'/);
+  assert.match(response.text, /Process Lab/);
 });
