@@ -152,6 +152,12 @@ static void test_process_parser(void) {
     rewind(input);
     CHECK(!read_processes(input, &items, &count, error, sizeof(error)), "parser rejeita duração zero");
     fclose(input);
+
+    input = tmpfile();
+    fputs("999999999999999999999 1 1\n", input);
+    rewind(input);
+    CHECK(!read_processes(input, &items, &count, error, sizeof(error)), "parser rejeita overflow inteiro");
+    fclose(input);
 }
 
 int main(void) {
