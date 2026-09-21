@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Simulador visual de algoritmos de escalonamento de CPU.">
+  <title>Process Lab — Simulador de Escalonamento</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="Process Lab, início">
+      <span class="brand-mark" aria-hidden="true">PL</span>
+      <span>Process Lab</span>
+    </a>
+    <p class="header-note">Motor C17 · simulação discreta</p>
+  </header>
+
+  <main id="top">
+    <section class="hero" aria-labelledby="hero-title">
+      <div>
+        <p class="eyebrow">Laboratório de sistemas operacionais</p>
+        <h1 id="hero-title">Veja cada decisão<br><em>da CPU.</em></h1>
+      </div>
+      <p class="hero-copy">Compare sete políticas de escalonamento, inspecione métricas e percorra a execução segundo a segundo — tudo calculado pelo mesmo núcleo em C da linha de comando.</p>
+    </section>
+
+    <form id="simulation-form" novalidate>
+      <section class="workspace" aria-labelledby="input-title">
+        <div class="section-heading">
+          <div>
+            <span class="step">01</span>
+            <h2 id="input-title">Carga de processos</h2>
+          </div>
+          <button class="button button-quiet" id="add-process" type="button">+ Adicionar processo</button>
+        </div>
+
+        <div class="input-grid">
+          <div class="editor-panel">
+            <div class="table-wrap">
+              <table class="process-editor">
+                <caption class="sr-only">Processos a simular</caption>
+                <thead>
+                  <tr><th>ID</th><th>Chegada</th><th>Duração</th><th>Prioridade</th><th><span class="sr-only">Ações</span></th></tr>
+                </thead>
+                <tbody id="process-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="text-panel">
+            <label for="process-text">Entrada padrão</label>
+            <p class="field-hint">Uma linha por processo: chegada, duração e prioridade.</p>
+            <textarea id="process-text" rows="8" spellcheck="false" aria-describedby="process-error">0 5 2
+0 2 3
+1 4 1
+3 3 4</textarea>
+            <p class="field-error" id="process-error" role="alert" aria-live="polite"></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="workspace" aria-labelledby="config-title">
+        <div class="section-heading">
+          <div>
+            <span class="step">02</span>
+            <h2 id="config-title">Parâmetros</h2>
+          </div>
+        </div>
+        <div class="config-grid">
+          <label class="number-field">Quantum
+            <input id="quantum" name="quantum" type="number" min="1" step="1" value="2" required>
+            <small>segundos por fatia</small>
+          </label>
+          <label class="number-field">Aging
+            <input id="aging" name="aging" type="number" min="0" step="1" value="1" required>
+            <small>ganho por período</small>
+          </label>
+          <label class="number-field">Semente
+            <input id="seed" name="seed" type="number" min="0" max="4294967295" step="1" value="42" required>
+            <small>desempate reproduzível</small>
+          </label>
+        </div>
+
+        <fieldset class="algorithms">
+          <legend>Algoritmos</legend>
+          <div class="algorithm-options" id="algorithm-options">
+            <label><input type="checkbox" value="fcfs" checked><span>FCFS</span></label>
+            <label><input type="checkbox" value="sjf" checked><span>SJF</span></label>
+            <label><input type="checkbox" value="srtf" checked><span>SRTF</span></label>
+            <label><input type="checkbox" value="priority-np" checked><span>Prioridade NP</span></label>
+            <label><input type="checkbox" value="priority-p" checked><span>Prioridade P</span></label>
+            <label><input type="checkbox" value="rr" checked><span>Round-Robin</span></label>
+            <label><input type="checkbox" value="priority-rr" checked><span>RR + Aging</span></label>
+          </div>
+        </fieldset>
+
+        <div class="submit-row">
+          <p id="form-status" class="form-status" role="status" aria-live="polite">Pronto para simular.</p>
+          <button class="button button-primary" id="simulate" type="submit">
+            <span>Executar simulação</span><span aria-hidden="true">→</span>
+          </button>
+        </div>
+      </section>
+    </form>
+
+    <section class="results" id="results" aria-labelledby="results-title" hidden>
+      <div class="section-heading results-heading">
+        <div>
+          <span class="step">03</span>
+          <h2 id="results-title">Comparação</h2>
+        </div>
+        <p>Selecione uma linha para explorar a execução.</p>
+      </div>
+      <div class="comparison-wrap">
+        <table class="comparison-table">
+          <thead><tr><th>Algoritmo</th><th>Turnaround</th><th>Espera</th><th>Resposta</th><th>Trocas</th></tr></thead>
+          <tbody id="comparison-body"></tbody>
+        </table>
+      </div>
+
+      <article class="detail" aria-labelledby="detail-title">
+        <header class="detail-header">
+          <div>
+            <p class="eyebrow">Análise detalhada</p>
+            <h3 id="detail-title"></h3>
+          </div>
+          <div class="now-card" aria-live="polite">
+            <span id="current-time">t = 0 s</span>
+            <strong id="current-process">CPU ociosa</strong>
+          </div>
+        </header>
+
+        <div class="playback" aria-label="Controles de reprodução">
+          <button type="button" id="reset" title="Reiniciar" aria-label="Reiniciar">↺</button>
+          <button type="button" id="previous" title="Segundo anterior" aria-label="Segundo anterior">←</button>
+          <button type="button" id="play" class="play" aria-label="Reproduzir">▶</button>
+          <button type="button" id="next" title="Próximo segundo" aria-label="Próximo segundo">→</button>
+          <label>Velocidade
+            <select id="speed">
+              <option value="1000">1×</option>
+              <option value="500" selected>2×</option>
+              <option value="250">4×</option>
+            </select>
+          </label>
+          <label class="scrubber"><span class="sr-only">Instante atual</span>
+            <input id="scrubber" type="range" min="0" max="0" value="0">
+          </label>
+        </div>
+
+        <div class="timeline-wrap" id="timeline-wrap" tabindex="0" aria-label="Diagrama temporal com rolagem horizontal">
+          <table class="timeline" id="timeline"></table>
+        </div>
+
+        <div class="metrics-wrap">
+          <table class="metrics-table">
+            <caption>Métricas por processo</caption>
+            <thead><tr><th>Processo</th><th>Primeiro despacho</th><th>Conclusão</th><th>Turnaround</th><th>Espera</th><th>Resposta</th></tr></thead>
+            <tbody id="metrics-body"></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <footer>
+    <p>Process Lab <span>—</span> escalonamento sem caixa-preta.</p>
+  </footer>
+</body>
+</html>
