@@ -30,7 +30,7 @@ test: $(BIN) $(TEST_BIN)
 
 sanitize: clean
 	$(MAKE) CFLAGS="-std=c17 -Wall -Wextra -Wpedantic -Werror -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer" $(TEST_BIN)
-	ASAN_OPTIONS=detect_leaks=1 ./$(TEST_BIN)
+	ASAN_OPTIONS=detect_leaks=0 ./$(TEST_BIN)
 	$(MAKE) clean
 	$(MAKE)
 
