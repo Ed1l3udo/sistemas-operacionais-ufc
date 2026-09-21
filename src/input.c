@@ -37,6 +37,29 @@ static bool parse_nonnegative(const char *text, int *value) {
     return true;
 }
 
+static bool parse_integer_token(char **cursor, int *value) {
+    char *end;
+    long parsed;
+    while (isspace((unsigned char)**cursor)) (*cursor)++;
+    if (**cursor == '\0') return false;
+    errno = 0;
+    parsed = strtol(*cursor, &end, 10);
+    if (errno || end == *cursor || parsed < INT_MIN || parsed > INT_MAX) return false;
+    if (*end != '\0' && !isspace((unsigned char)*end)) return false;
+    *value = (int)parsed;
+    *cursor = end;
+    return true;
+}
+
+static bool parse_process_line(char *text, int *arrival, int *burst, int *priority) {
+    char *cursor = text;
+    if (!parse_integer_token(&cursor, arrival) ||
+        !parse_integer_token(&cursor, burst) ||
+        !parse_integer_token(&cursor, priority)) return false;
+    while (isspace((unsigned char)*cursor)) cursor++;
+    return *cursor == '\0';
+}
+
 bool read_config(const char *path, SchedulerConfig *config, char *error, size_t error_size) {
     FILE *file = fopen(path, "r");
     char *line = NULL;
@@ -114,14 +137,13 @@ bool read_processes(FILE *stream, ProcessSpec **processes, size_t *count,
     unsigned line_number = 0;
 
     while ((length = getline(&line, &line_capacity, stream)) >= 0) {
-        char extra;
         int arrival, burst, priority;
         char *content;
         (void)length;
         line_number++;
         content = trim(line);
         if (*content == '\0' || *content == '#') continue;
-        if (sscanf(content, "%d %d %d %c", &arrival, &burst, &priority, &extra) != 3) {
+        if (!parse_process_line(content, &arrival, &burst, &priority)) {
             set_error(error, error_size, "processo inválido na linha %u: use chegada duração prioridade", line_number);
             goto fail;
         }
