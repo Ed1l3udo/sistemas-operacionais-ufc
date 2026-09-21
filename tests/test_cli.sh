@@ -29,4 +29,24 @@ if printf '0 1 1\n' | "$BIN" --config "$CONFIG" --algorithm nope > "$TMP_DIR/out
 fi
 test ! -s "$TMP_DIR/out"
 
+if "$BIN" --config tests/fixtures/config-missing-aging.txt --format json < "$INPUT" > "$TMP_DIR/out" 2> "$TMP_DIR/error"; then
+    echo 'configuração incompleta foi aceita' >&2
+    exit 1
+fi
+test ! -s "$TMP_DIR/out"
+grep -q 'quantum e aging' "$TMP_DIR/error"
+
+if "$BIN" --config tests/fixtures/config-zero-quantum.txt --format json < "$INPUT" > "$TMP_DIR/out" 2> "$TMP_DIR/error"; then
+    echo 'quantum zero foi aceito' >&2
+    exit 1
+fi
+test ! -s "$TMP_DIR/out"
+
+if "$BIN" --config "$CONFIG" --format json < /dev/null > "$TMP_DIR/out" 2> "$TMP_DIR/error"; then
+    echo 'entrada vazia foi aceita' >&2
+    exit 1
+fi
+test ! -s "$TMP_DIR/out"
+grep -q 'nenhum processo' "$TMP_DIR/error"
+
 printf 'CLI validada.\n'
