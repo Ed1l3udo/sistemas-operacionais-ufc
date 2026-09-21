@@ -1,0 +1,14 @@
+# C build artifacts
+simulator/build/
+simulator/scheduler
+simulator/scheduler.exe
+
+# Node.js dependencies and local environment files
+server/node_modules/
+server/.env
+
+# Editor and operating-system artifacts
+.DS_Store
+Thumbs.db
+*.swp
+
