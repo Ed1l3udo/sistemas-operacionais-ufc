@@ -51,13 +51,13 @@
 
 ## Backlog de implementação
 
-- [ ] Estruturar build C17, tipos comuns, parser e validações.
-- [ ] Implementar os sete algoritmos, métricas e timelines.
-- [ ] Implementar saída textual e JSON e cobrir a CLI com testes.
-- [ ] Criar API Node.js segura que execute o mesmo binário.
-- [ ] Criar interface web responsiva, comparação e playback.
-- [ ] Completar testes unitários, integração CLI/API e sanitizadores.
-- [ ] Documentar arquitetura, decisões, execução e exemplos.
+- [x] Estruturar build C17, tipos comuns, parser e validações.
+- [x] Implementar os sete algoritmos, métricas e timelines.
+- [x] Implementar saída textual e JSON e cobrir a CLI com testes.
+- [x] Criar API Node.js segura que execute o mesmo binário.
+- [x] Criar interface web responsiva, comparação e playback.
+- [x] Completar testes unitários, integração CLI/API e sanitizadores.
+- [x] Documentar arquitetura, decisões, execução e exemplos.
 
 ## Critérios de conclusão
 
