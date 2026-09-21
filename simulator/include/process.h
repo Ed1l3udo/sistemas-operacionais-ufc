@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 
 #include "error.h"
@@ -21,8 +22,8 @@ typedef struct {
     int remaining_time;
     int static_priority;
     int dynamic_priority;
-    int first_execution;
-    int completion_time;
+    int64_t first_execution;
+    int64_t completion_time;
     ProcessStatus status;
 } Process;
 
