@@ -8,6 +8,9 @@ void run_process_tests(void);
 void run_integration_tests(void);
 void run_queue_tests(void);
 void run_simulation_tests(void);
+void run_prng_tests(void);
+void run_selection_tests(void);
+void run_scheduler_tests(void);
 
 int main(void)
 {
@@ -17,6 +20,9 @@ int main(void)
     run_integration_tests();
     run_queue_tests();
     run_simulation_tests();
+    run_prng_tests();
+    run_selection_tests();
+    run_scheduler_tests();
 
     if (test_failures != 0) {
         fprintf(stderr, "%d test assertion(s) failed.\n", test_failures);
