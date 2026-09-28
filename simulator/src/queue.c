@@ -110,6 +110,38 @@ bool index_queue_pop(IndexQueue *queue, size_t *value)
     return true;
 }
 
+bool index_queue_get(const IndexQueue *queue, size_t logical_position,
+                     size_t *value)
+{
+    if (queue == NULL || value == NULL || logical_position >= queue->count) {
+        return false;
+    }
+    *value = queue->items[(queue->head + logical_position) % queue->capacity];
+    return true;
+}
+
+bool index_queue_remove_at(IndexQueue *queue, size_t logical_position,
+                           size_t *value)
+{
+    size_t index;
+
+    if (queue == NULL || value == NULL || logical_position >= queue->count) {
+        return false;
+    }
+    if (logical_position == 0) {
+        return index_queue_pop(queue, value);
+    }
+    *value = queue->items[(queue->head + logical_position) % queue->capacity];
+    for (index = logical_position; index + 1 < queue->count; ++index) {
+        size_t destination = (queue->head + index) % queue->capacity;
+        size_t source = (queue->head + index + 1) % queue->capacity;
+
+        queue->items[destination] = queue->items[source];
+    }
+    --queue->count;
+    return true;
+}
+
 bool index_queue_contains(const IndexQueue *queue, size_t value)
 {
     size_t index;

@@ -20,5 +20,10 @@ bool scheduler_run_priority_preemptive(const ProcessList *source,
                                        uint64_t seed,
                                        Simulation *result,
                                        SchedulerError *error);
+bool scheduler_run_round_robin(const ProcessList *source, int quantum,
+                               Simulation *result, SchedulerError *error);
+bool scheduler_run_priority_round_robin(const ProcessList *source, int quantum,
+                                        int aging, Simulation *result,
+                                        SchedulerError *error);
 
 #endif

@@ -20,6 +20,10 @@ size_t index_queue_size(const IndexQueue *queue);
 bool index_queue_push(IndexQueue *queue, size_t value, SchedulerError *error);
 bool index_queue_peek(const IndexQueue *queue, size_t *value);
 bool index_queue_pop(IndexQueue *queue, size_t *value);
+bool index_queue_get(const IndexQueue *queue, size_t logical_position,
+                     size_t *value);
+bool index_queue_remove_at(IndexQueue *queue, size_t logical_position,
+                           size_t *value);
 bool index_queue_contains(const IndexQueue *queue, size_t value);
 
 #endif

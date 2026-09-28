@@ -12,6 +12,7 @@ void run_prng_tests(void);
 void run_selection_tests(void);
 void run_scheduler_tests(void);
 void run_preemptive_tests(void);
+void run_round_robin_tests(void);
 
 int main(void)
 {
@@ -25,6 +26,7 @@ int main(void)
     run_selection_tests();
     run_scheduler_tests();
     run_preemptive_tests();
+    run_round_robin_tests();
 
     if (test_failures != 0) {
         fprintf(stderr, "%d test assertion(s) failed.\n", test_failures);
