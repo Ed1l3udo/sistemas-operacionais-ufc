@@ -9,6 +9,11 @@ typedef enum {
     NON_PREEMPTIVE_PRIORITY
 } NonPreemptiveCriterion;
 
+typedef enum {
+    PREEMPTIVE_SRTF,
+    PREEMPTIVE_PRIORITY
+} PreemptiveCriterion;
+
 static int process_criterion(const Process *process,
                              NonPreemptiveCriterion criterion)
 {
@@ -117,6 +122,116 @@ cleanup:
     return success;
 }
 
+static int preemptive_criterion(const Process *process,
+                                PreemptiveCriterion criterion)
+{
+    if (criterion == PREEMPTIVE_SRTF) {
+        return process->remaining_time;
+    }
+    return process->static_priority;
+}
+
+static bool collect_best_preemptive(const Simulation *simulation,
+                                    PreemptiveCriterion criterion,
+                                    IndexList *candidates,
+                                    SchedulerError *error)
+{
+    size_t index;
+    bool found = false;
+    int best_value = 0;
+
+    index_list_clear(candidates);
+    for (index = 0; index < simulation->processes.count; ++index) {
+        const Process *process = &simulation->processes.items[index];
+        int value;
+
+        if (process->status != PROCESS_READY &&
+            process->status != PROCESS_RUNNING) {
+            continue;
+        }
+        value = preemptive_criterion(process, criterion);
+        if (!found || value < best_value) {
+            index_list_clear(candidates);
+            best_value = value;
+            found = true;
+        }
+        if (value == best_value && !index_list_append(candidates, index, error)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool scheduler_run_preemptive(const ProcessList *source, uint64_t seed,
+                                     PreemptiveCriterion criterion,
+                                     Simulation *result,
+                                     SchedulerError *error)
+{
+    Simulation working;
+    IndexList candidates;
+    Prng prng;
+    bool success = false;
+
+    if (source == NULL || result == NULL) {
+        error_set(error, EXIT_CODE_INTERNAL, "invalid scheduler request");
+        return false;
+    }
+    process_list_init(&result->processes);
+    timeline_init(&result->timeline);
+    result->current_time = 0;
+    result->completed_count = 0;
+    result->current_process_index = SIMULATION_NO_PROCESS;
+    index_list_init(&candidates);
+    prng_init(&prng, seed);
+    if (!simulation_init(&working, source, error)) {
+        goto cleanup;
+    }
+
+    while (!simulation_is_complete(&working)) {
+        size_t selected_index;
+
+        if (!simulation_admit_current(&working, NULL, error) ||
+            !collect_best_preemptive(&working, criterion, &candidates, error)) {
+            goto cleanup_working;
+        }
+        if (candidates.count == 0) {
+            if (!simulation_record_idle_second(&working, error)) {
+                goto cleanup_working;
+            }
+            continue;
+        }
+        if (!selection_break_tie(&working, &candidates,
+                                 working.current_process_index, &prng,
+                                 &selected_index, error)) {
+            goto cleanup_working;
+        }
+        if (selected_index != working.current_process_index) {
+            if (working.current_process_index != SIMULATION_NO_PROCESS &&
+                !simulation_preempt_current(&working, NULL, error)) {
+                goto cleanup_working;
+            }
+            if (!simulation_dispatch(&working, selected_index, error)) {
+                goto cleanup_working;
+            }
+        }
+        if (!simulation_execute_second(&working, error)) {
+            goto cleanup_working;
+        }
+    }
+    if (!simulation_validate(&working, error)) {
+        goto cleanup_working;
+    }
+    *result = working;
+    success = true;
+    goto cleanup;
+
+cleanup_working:
+    simulation_destroy(&working);
+cleanup:
+    index_list_destroy(&candidates);
+    return success;
+}
+
 bool scheduler_run_fcfs(const ProcessList *source, uint64_t seed,
                         Simulation *result, SchedulerError *error)
 {
@@ -138,4 +253,20 @@ bool scheduler_run_priority_non_preemptive(const ProcessList *source,
 {
     return scheduler_run_non_preemptive(source, seed, NON_PREEMPTIVE_PRIORITY,
                                         result, error);
+}
+
+bool scheduler_run_srtf(const ProcessList *source, uint64_t seed,
+                        Simulation *result, SchedulerError *error)
+{
+    return scheduler_run_preemptive(source, seed, PREEMPTIVE_SRTF, result,
+                                    error);
+}
+
+bool scheduler_run_priority_preemptive(const ProcessList *source,
+                                       uint64_t seed,
+                                       Simulation *result,
+                                       SchedulerError *error)
+{
+    return scheduler_run_preemptive(source, seed, PREEMPTIVE_PRIORITY, result,
+                                    error);
 }

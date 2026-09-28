@@ -88,8 +88,40 @@ static void test_random_and_invalid_choices(void)
     simulation_destroy(&simulation);
 }
 
+static void test_running_current_candidate(void)
+{
+    Simulation simulation;
+    IndexList candidates;
+    SchedulerError error;
+    Prng prng;
+    Prng before;
+    size_t selected;
+
+    error_clear(&error);
+    TEST_ASSERT(make_simulation(&simulation, &error));
+    TEST_ASSERT(simulation_dispatch(&simulation, 0, &error));
+    index_list_init(&candidates);
+    TEST_ASSERT(index_list_append(&candidates, 0, &error));
+    TEST_ASSERT(index_list_append(&candidates, 1, &error));
+    prng_init(&prng, 1234);
+    before = prng;
+    TEST_ASSERT(selection_break_tie(&simulation, &candidates, 0, &prng,
+                                    &selected, &error));
+    TEST_ASSERT(selected == 0 && prng.state == before.state);
+    TEST_ASSERT(simulation.processes.items[0].status == PROCESS_RUNNING);
+    TEST_ASSERT(simulation.processes.items[1].status == PROCESS_READY);
+    index_list_clear(&candidates);
+    TEST_ASSERT(index_list_append(&candidates, 1, &error));
+    TEST_ASSERT(selection_break_tie(&simulation, &candidates, 0, &prng,
+                                    &selected, &error));
+    TEST_ASSERT(selected == 1 && prng.state == before.state);
+    index_list_destroy(&candidates);
+    simulation_destroy(&simulation);
+}
+
 void run_selection_tests(void)
 {
     test_determined_choices();
     test_random_and_invalid_choices();
+    test_running_current_candidate();
 }

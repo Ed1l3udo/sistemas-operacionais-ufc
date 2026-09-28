@@ -14,5 +14,11 @@ bool scheduler_run_priority_non_preemptive(const ProcessList *source,
                                            uint64_t seed,
                                            Simulation *result,
                                            SchedulerError *error);
+bool scheduler_run_srtf(const ProcessList *source, uint64_t seed,
+                        Simulation *result, SchedulerError *error);
+bool scheduler_run_priority_preemptive(const ProcessList *source,
+                                       uint64_t seed,
+                                       Simulation *result,
+                                       SchedulerError *error);
 
 #endif
