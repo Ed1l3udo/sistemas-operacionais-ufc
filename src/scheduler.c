@@ -447,6 +447,7 @@ static bool simulate_priority_rr(const ProcessSpec *processes, size_t count, Run
         int returned = pending;
         int cpu_before = current >= 0 ? current : pending;
         DecisionReason reason;
+        bool dispatched = false;
         admit_priority_fifo(processes, runtime, count, time, &order);
         if (pending >= 0) {
             runtime[pending].state = STATE_READY;
@@ -456,10 +457,7 @@ static bool simulate_priority_rr(const ProcessSpec *processes, size_t count, Run
         if (current < 0) {
             current = choose_priority_rr(runtime, count);
             quantum_used = 0;
-            if (current >= 0) {
-                runtime[current].ready_wait = 0;
-                runtime[current].effective_priority = processes[current].priority;
-            }
+            dispatched = current >= 0;
         }
         if (current < 0) reason = DECISION_IDLE;
         else if (returned >= 0) reason = DECISION_QUANTUM;
@@ -469,6 +467,10 @@ static bool simulate_priority_rr(const ProcessSpec *processes, size_t count, Run
                              current, returned, quantum_used, reason,
                              priority_rr_choice(runtime, count, current),
                              error, error_size)) return false;
+        if (dispatched) {
+            runtime[current].ready_wait = 0;
+            runtime[current].effective_priority = processes[current].priority;
+        }
         run_second(runtime, current, time, result->timeline);
         age_waiting(processes, runtime, count, config, current);
         if (current >= 0) {

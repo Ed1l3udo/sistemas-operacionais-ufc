@@ -147,6 +147,7 @@ static void test_reproducible_tie(void) {
 
 static void test_decision_trace(void) {
     ProcessSpec items[] = {{1, 0, 4, 2}, {2, 1, 1, 1}};
+    ProcessSpec aging_items[] = {{1, 0, 8, 1}, {2, 0, 2, 5}};
     SimulationResult result = run_traced(items, 2, ALG_SRTF, 2, 1, 42);
     CHECK(result.decision_length == result.timeline_length, "uma decisão por segundo");
     CHECK(result.decisions[0].selected == 0, "rastreamento registra despacho inicial");
@@ -159,6 +160,14 @@ static void test_decision_trace(void) {
     CHECK(result.decisions[1].candidates[1].remaining == 1,
           "rastreamento inclui a chegada concorrente");
     CHECK(result.decisions[1].completes, "rastreamento registra conclusão após o segundo");
+    free_result(&result);
+
+    result = run_traced(aging_items, 2, ALG_PRIORITY_RR, 2, 2, 42);
+    CHECK(result.decisions[4].selected == 1, "rastreamento registra seleção promovida por aging");
+    CHECK(result.decisions[4].candidates[1].effective_priority == 1,
+          "rastreamento preserva a prioridade efetiva que decidiu o despacho");
+    CHECK(result.decisions[4].candidates[1].ready_wait == 4,
+          "rastreamento preserva a espera anterior ao reinício do aging");
     free_result(&result);
 }
 
