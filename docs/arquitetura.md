@@ -146,6 +146,10 @@ playback possui reinício, passo anterior, reprodução/pausa, passo seguinte,
 scrubber e três velocidades. A única animação temporal da aplicação ocorre nesses
 controles.
 
+Uma proposta de indicadores visuais específicos para a decisão de cada política,
+ainda não implementada, está em
+[`indicadores-decisoes-escalonador.md`](indicadores-decisoes-escalonador.md).
+
 ## 8. Testes e limites
 
 Os testes C cobrem processo único, ociosidade, chegadas desordenadas e simultâneas,
