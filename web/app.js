@@ -518,10 +518,49 @@ function startPlayback() {
   updatePlayback();
 }
 
-elements.play.addEventListener('click', () => (state.timer ? stopPlayback() : startPlayback()));
-elements.reset.addEventListener('click', () => { stopPlayback(); state.second = 0; updatePlayback(); });
-elements.previous.addEventListener('click', () => { stopPlayback(); state.second -= 1; updatePlayback(); });
-elements.next.addEventListener('click', () => { stopPlayback(); state.second += 1; updatePlayback(); });
+function togglePlayback() {
+  if (state.timer) stopPlayback();
+  else startPlayback();
+}
+
+function resetPlayback() {
+  stopPlayback();
+  state.second = 0;
+  updatePlayback();
+}
+
+function stepPlayback(offset) {
+  stopPlayback();
+  state.second += offset;
+  updatePlayback();
+}
+
+function isInteractiveTarget(target) {
+  return target instanceof Element && Boolean(target.closest('input, textarea, select, button, a, [contenteditable="true"]'));
+}
+
+document.addEventListener('keydown', (event) => {
+  if (!selectedResult() || isInteractiveTarget(event.target) || event.altKey || event.ctrlKey || event.metaKey) return;
+  if (event.code === 'Space') {
+    event.preventDefault();
+    if (event.repeat) return;
+    togglePlayback();
+  } else if (event.key === 'ArrowLeft') {
+    event.preventDefault();
+    stepPlayback(-1);
+  } else if (event.key === 'ArrowRight') {
+    event.preventDefault();
+    stepPlayback(1);
+  } else if (event.key === 'Home') {
+    event.preventDefault();
+    resetPlayback();
+  }
+});
+
+elements.play.addEventListener('click', togglePlayback);
+elements.reset.addEventListener('click', resetPlayback);
+elements.previous.addEventListener('click', () => stepPlayback(-1));
+elements.next.addEventListener('click', () => stepPlayback(1));
 elements.scrubber.addEventListener('input', () => { stopPlayback(); state.second = Number(elements.scrubber.value); updatePlayback(); });
 elements.speed.addEventListener('change', () => { if (state.timer) startPlayback(); });
 
