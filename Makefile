@@ -1,11 +1,12 @@
 CC ?= gcc
 CFLAGS ?= -std=c17 -Wall -Wextra -Wpedantic -Werror -O2
 CPPFLAGS ?= -Iinclude
+EXEEXT := $(if $(filter Windows_NT,$(OS)),.exe,)
 BUILD_DIR := build
 SRC := src/main.c src/input.c src/scheduler.c src/output.c
 OBJ := $(SRC:src/%.c=$(BUILD_DIR)/%.o)
-BIN := $(BUILD_DIR)/scheduler
-TEST_BIN := $(BUILD_DIR)/test_scheduler
+BIN := $(BUILD_DIR)/scheduler$(EXEEXT)
+TEST_BIN := $(BUILD_DIR)/test_scheduler$(EXEEXT)
 
 .PHONY: all clean test sanitize web
 
@@ -25,7 +26,7 @@ $(TEST_BIN): tests/test_scheduler.c src/input.c src/scheduler.c src/output.c inc
 
 test: $(BIN) $(TEST_BIN)
 	./$(TEST_BIN)
-	sh tests/test_cli.sh
+	EXEEXT=$(EXEEXT) sh tests/test_cli.sh
 	@if [ -f tests/test_api.mjs ] && command -v node >/dev/null 2>&1; then node --test tests/test_api.mjs; else echo "Teste da API ainda indisponível ou Node.js ausente"; fi
 
 sanitize: clean

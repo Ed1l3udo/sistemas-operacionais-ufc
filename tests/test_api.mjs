@@ -11,7 +11,7 @@ import { createAppServer } from '../web/server.mjs';
 
 const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_DIR = path.dirname(TEST_DIR);
-const BINARY = path.join(PROJECT_DIR, 'build', 'scheduler');
+const BINARY = path.join(PROJECT_DIR, 'build', `scheduler${process.platform === 'win32' ? '.exe' : ''}`);
 const PROCESS_INPUT = '0 5 2\n0 2 3\n1 4 1\n3 3 4\n';
 const ALL_ALGORITHMS = [
   'fcfs', 'sjf', 'srtf', 'priority-np', 'priority-p', 'rr', 'priority-rr',

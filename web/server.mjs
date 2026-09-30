@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const SERVER_FILE = fileURLToPath(import.meta.url);
 const WEB_DIR = path.dirname(SERVER_FILE);
 const PROJECT_DIR = path.dirname(WEB_DIR);
-const DEFAULT_BINARY = path.join(PROJECT_DIR, 'build', 'scheduler');
+const DEFAULT_BINARY = path.join(PROJECT_DIR, 'build', `scheduler${process.platform === 'win32' ? '.exe' : ''}`);
 const HOST = '127.0.0.1';
 const BODY_LIMIT = 64 * 1024;
 const OUTPUT_LIMIT = 12 * 1024 * 1024;
