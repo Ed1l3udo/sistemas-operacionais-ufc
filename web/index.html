@@ -149,6 +149,21 @@
           </label>
         </div>
 
+        <section class="decision-panel" aria-labelledby="decision-title">
+          <header class="decision-heading">
+            <div>
+              <p class="eyebrow">Decisão do escalonador</p>
+              <h4 id="decision-title">Carregando critério…</h4>
+            </div>
+            <div class="decision-arrivals" aria-label="Chegadas neste instante">
+              <span>Chegadas</span>
+              <strong id="decision-arrivals">—</strong>
+            </div>
+          </header>
+          <div id="decision-visual" class="decision-visual" aria-live="polite"></div>
+          <p id="decision-explanation" class="decision-explanation">Preparando a fotografia da decisão.</p>
+        </section>
+
         <div class="timeline-wrap" id="timeline-wrap" tabindex="0" aria-label="Diagrama temporal com rolagem horizontal">
           <table class="timeline" id="timeline"></table>
         </div>

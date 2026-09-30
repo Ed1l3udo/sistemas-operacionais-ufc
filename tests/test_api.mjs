@@ -149,4 +149,5 @@ test('servidor entrega a interface com cabeçalhos seguros', async () => {
   assert.match(response.type, /^text\/html/);
   assert.match(response.csp, /default-src 'self'/);
   assert.match(response.text, /Process Lab/);
+  assert.match(response.text, /id="decision-visual"/);
 });

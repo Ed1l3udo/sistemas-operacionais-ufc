@@ -11,6 +11,9 @@ const state = {
   selectedAlgorithm: null,
   second: 0,
   timer: null,
+  request: null,
+  traces: new Map(),
+  traceRequest: 0,
 };
 
 const elements = {
@@ -35,6 +38,10 @@ const elements = {
   next: document.querySelector('#next'),
   speed: document.querySelector('#speed'),
   scrubber: document.querySelector('#scrubber'),
+  decisionTitle: document.querySelector('#decision-title'),
+  decisionArrivals: document.querySelector('#decision-arrivals'),
+  decisionVisual: document.querySelector('#decision-visual'),
+  decisionExplanation: document.querySelector('#decision-explanation'),
 };
 
 function processText(processes) {
@@ -179,6 +186,9 @@ elements.form.addEventListener('submit', async (event) => {
     if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível concluir a simulação.');
     state.processes = processes;
     state.data = body;
+    state.request = payload;
+    state.traces = new Map();
+    state.traceRequest += 1;
     state.selectedAlgorithm = body.results[0]?.algorithm ?? null;
     state.second = 0;
     renderResults();
@@ -234,6 +244,202 @@ function selectedResult() {
   return state.data?.results.find((result) => result.algorithm === state.selectedAlgorithm);
 }
 
+function setDecisionLoading(message = 'Consultando o motor C…') {
+  elements.decisionTitle.textContent = 'Como a CPU foi escolhida';
+  elements.decisionArrivals.textContent = '—';
+  elements.decisionVisual.innerHTML = '<div class="decision-loading" aria-hidden="true"><span></span><span></span><span></span></div>';
+  elements.decisionExplanation.textContent = message;
+}
+
+async function loadDecisionTrace(result) {
+  const cached = state.traces.get(result.algorithm);
+  if (cached) {
+    renderDecision();
+    return;
+  }
+  const requestId = ++state.traceRequest;
+  setDecisionLoading();
+  try {
+    const response = await fetch('/api/trace', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...state.request, algorithms: [result.algorithm] }),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível carregar as decisões.');
+    const traced = body.results[0];
+    state.traces.set(result.algorithm, traced.decisions);
+    if (requestId === state.traceRequest && state.selectedAlgorithm === result.algorithm) renderDecision();
+  } catch (error) {
+    if (requestId !== state.traceRequest || state.selectedAlgorithm !== result.algorithm) return;
+    elements.decisionVisual.innerHTML = '<div class="decision-empty">Rastreamento indisponível</div>';
+    elements.decisionExplanation.textContent = error.message;
+  }
+}
+
+function processSpec(id) {
+  return state.data.processes.find((process) => process.id === id);
+}
+
+function selectedCandidate(decision) {
+  return decision.ready.find((candidate) => candidate.id === decision.selected);
+}
+
+function arrivalsAt(time) {
+  return state.data.processes.filter((process) => process.arrival === time).map((process) => process.id);
+}
+
+function processCard(candidate, { selected = false, detail = '', accent = '' } = {}) {
+  if (!candidate) return '<div class="process-card empty"><strong>CPU ociosa</strong><span>sem processo pronto</span></div>';
+  return `<div class="process-card ${selected ? 'selected' : ''}" ${accent ? `style="--card-accent:${accent}"` : ''}>
+    <strong>${candidate.id}</strong>
+    <span>${detail}</span>
+  </div>`;
+}
+
+function compactCandidates(candidates, limit = 12) {
+  return { shown: candidates.slice(0, limit), hidden: Math.max(0, candidates.length - limit) };
+}
+
+function overflowLabel(hidden) {
+  return hidden ? `<span class="candidate-overflow">+${hidden} processo(s)</span>` : '';
+}
+
+function renderFcfs(decision) {
+  const ordered = [...decision.ready].sort((left, right) => {
+    const arrival = processSpec(left.id).arrival - processSpec(right.id).arrival;
+    return arrival || left.remaining - right.remaining || left.readyOrder - right.readyOrder;
+  });
+  const waiting = compactCandidates(ordered.filter((candidate) => candidate.id !== decision.selected));
+  return `<div class="policy-stage fcfs-stage">
+    <div class="cpu-station"><span>CPU</span>${processCard(selectedCandidate(decision), {
+      selected: true, detail: `${selectedCandidate(decision)?.remaining ?? 0} s antes da execução`,
+    })}</div>
+    <div class="flow-arrow" aria-hidden="true">←</div>
+    <div class="queue-lane"><span class="lane-label">Fila por chegada</span><div class="card-row">
+      ${waiting.shown.map((candidate) => processCard(candidate, { detail: `chegou em t=${processSpec(candidate.id).arrival}` })).join('')}
+      ${waiting.shown.length ? '' : '<span class="empty-lane">ninguém aguardando</span>'}
+      ${overflowLabel(waiting.hidden)}
+    </div></div>
+  </div>`;
+}
+
+function remainingBars(decision, preemptive) {
+  const ordered = [...decision.ready].sort((left, right) => left.remaining - right.remaining);
+  const maximum = Math.max(1, ...ordered.map((candidate) => candidate.remaining));
+  const visible = compactCandidates(ordered);
+  return `<div class="remaining-comparison ${preemptive && decision.reason === 'preempt' ? 'has-preemption' : ''}">
+    <div class="comparison-caption"><span>${preemptive ? 'Reavaliado a cada segundo' : 'Escolhido quando a CPU fica livre'}</span><strong>menor vence</strong></div>
+    ${visible.shown.map((candidate) => `<div class="remaining-row ${candidate.id === decision.selected ? 'winner' : ''}">
+      <strong>${candidate.id}</strong><div class="remaining-track"><span style="width:${Math.max(8, candidate.remaining / maximum * 100)}%"></span></div><b>${candidate.remaining} s</b>
+    </div>`).join('')}
+    ${overflowLabel(visible.hidden)}
+  </div>`;
+}
+
+function priorityLadder(decision, preemptive) {
+  const ordered = [...decision.ready].sort((left, right) => left.priority - right.priority || left.remaining - right.remaining);
+  const visible = compactCandidates(ordered);
+  return `<div class="priority-ladder ${preemptive && decision.reason === 'preempt' ? 'has-preemption' : ''}">
+    <div class="ladder-scale"><span>prioridade mais alta</span><span>menor número</span></div>
+    ${visible.shown.map((candidate) => `<div class="priority-step ${candidate.id === decision.selected ? 'winner' : ''}" style="--priority-level:${candidate.priority}">
+      <strong>${candidate.id}</strong><span>prioridade ${candidate.priority}</span><small>${candidate.remaining} s restantes</small>
+    </div>`).join('')}
+    ${overflowLabel(visible.hidden)}
+  </div>`;
+}
+
+function quantumMeter(decision) {
+  const used = decision.selected ? Math.min(decision.quantumLimit, decision.quantumUsed + 1) : 0;
+  const percentage = decision.quantumLimit ? used / decision.quantumLimit * 100 : 0;
+  return `<div class="quantum-meter"><div><span>Fatia atual</span><strong>${used}/${decision.quantumLimit} s</strong></div>
+    <div class="quantum-track"><span style="width:${percentage}%"></span></div>
+  </div>`;
+}
+
+function renderRoundRobin(decision) {
+  const queue = compactCandidates([...decision.ready]
+    .filter((candidate) => candidate.id !== decision.selected)
+    .sort((left, right) => left.readyOrder - right.readyOrder));
+  return `<div class="policy-stage rr-stage">
+    <div class="cpu-station"><span>CPU</span>${processCard(selectedCandidate(decision), {
+      selected: true, detail: `${selectedCandidate(decision)?.remaining ?? 0} s restantes`,
+    })}${quantumMeter(decision)}</div>
+    <div class="circular-arrow" aria-hidden="true">↻</div>
+    <div class="queue-lane"><span class="lane-label">Fila circular FIFO</span><div class="card-row numbered">
+      ${queue.shown.map((candidate, index) => `<div class="queue-position"><i>${index + 1}</i>${processCard(candidate, { detail: `${candidate.remaining} s restantes` })}</div>`).join('')}
+      ${queue.shown.length ? '' : '<span class="empty-lane">fila vazia</span>'}
+      ${overflowLabel(queue.hidden)}
+    </div></div>
+  </div>`;
+}
+
+function renderPriorityRoundRobin(decision) {
+  const ordered = [...decision.ready].sort((left, right) => (
+    left.effectivePriority - right.effectivePriority || left.readyOrder - right.readyOrder
+  ));
+  const visible = compactCandidates(ordered);
+  return `<div class="priority-aging-stage">
+    <div class="aging-summary">${quantumMeter(decision)}<span>Sem preempção durante a fatia</span></div>
+    <div class="aging-grid">${visible.shown.map((candidate) => {
+      const progress = decision.quantumLimit ? candidate.readyWait % decision.quantumLimit / decision.quantumLimit * 100 : 0;
+      return `<div class="aging-card ${candidate.id === decision.selected ? 'winner' : ''}">
+        <div><strong>${candidate.id}</strong><span>${candidate.priority} → <b>${candidate.effectivePriority}</b></span></div>
+        <small>${candidate.readyWait} s de espera · ordem ${candidate.readyOrder + 1}</small>
+        <div class="aging-track"><span style="width:${progress}%"></span></div>
+      </div>`;
+    }).join('')}</div>${overflowLabel(visible.hidden)}
+  </div>`;
+}
+
+function decisionExplanation(result, decision) {
+  if (!decision.selected) return 'Nenhum processo está pronto; a CPU permanece ociosa neste segundo.';
+  const chosen = selectedCandidate(decision);
+  if (decision.reason === 'preempt') {
+    const criterion = result.algorithm === 'srtf'
+      ? `${chosen.remaining} s restantes`
+      : `prioridade ${chosen.priority}`;
+    return `${decision.selected} assume a CPU no lugar de ${decision.cpuBefore}: ${criterion} é o melhor valor disponível.`;
+  }
+  if (decision.reason === 'quantum') {
+    return `${decision.returned} consumiu seu quantum e voltou à fila; ${decision.selected} é o próximo processo elegível.`;
+  }
+  if (decision.reason === 'continue') {
+    const suffix = ['sjf', 'priority-np'].includes(result.algorithm)
+      ? ' A política não interrompe o trabalho em andamento.'
+      : '';
+    return `${decision.selected} continua na CPU.${suffix}`;
+  }
+  const choices = {
+    criterion: 'venceu pelo critério principal', remaining: 'venceu pelo menor tempo restante',
+    random: 'venceu o desempate pseudoaleatório reproduzível', fifo: 'estava na frente da fila FIFO',
+  };
+  return `${decision.selected} recebeu a CPU porque ${choices[decision.choice] || 'era o único processo pronto'}.`;
+}
+
+function renderDecision() {
+  const result = selectedResult();
+  const decisions = result ? state.traces.get(result.algorithm) : null;
+  const decision = decisions?.[state.second];
+  if (!result || !decision) return;
+  const arrivals = arrivalsAt(decision.time);
+  elements.decisionArrivals.textContent = arrivals.length ? arrivals.join(', ') : 'nenhuma';
+  const titles = {
+    fcfs: 'Fila de chegadas', sjf: 'Comparador de trabalhos curtos', srtf: 'Disputa de tempo restante',
+    'priority-np': 'Escada de prioridades', 'priority-p': 'Disputa de prioridades',
+    rr: 'Fila circular e relógio do quantum', 'priority-rr': 'Prioridade efetiva e envelhecimento',
+  };
+  elements.decisionTitle.textContent = titles[result.algorithm];
+  if (result.algorithm === 'fcfs') elements.decisionVisual.innerHTML = renderFcfs(decision);
+  else if (result.algorithm === 'sjf') elements.decisionVisual.innerHTML = remainingBars(decision, false);
+  else if (result.algorithm === 'srtf') elements.decisionVisual.innerHTML = remainingBars(decision, true);
+  else if (result.algorithm === 'priority-np') elements.decisionVisual.innerHTML = priorityLadder(decision, false);
+  else if (result.algorithm === 'priority-p') elements.decisionVisual.innerHTML = priorityLadder(decision, true);
+  else if (result.algorithm === 'rr') elements.decisionVisual.innerHTML = renderRoundRobin(decision);
+  else elements.decisionVisual.innerHTML = renderPriorityRoundRobin(decision);
+  elements.decisionExplanation.textContent = decisionExplanation(result, decision);
+}
+
 function renderDetail() {
   const result = selectedResult();
   if (!result) return;
@@ -254,7 +460,9 @@ function renderDetail() {
   `).join('');
   elements.scrubber.max = String(Math.max(0, result.timeline.length - 1));
   elements.scrubber.value = '0';
+  setDecisionLoading();
   updatePlayback(false);
+  loadDecisionTrace(result);
 }
 
 function updatePlayback(scroll = true) {
@@ -265,6 +473,7 @@ function updatePlayback(scroll = true) {
   elements.currentTime.textContent = `t = ${entry.time} s`;
   elements.currentProcess.textContent = entry.process ? `${entry.process} em execução` : 'CPU ociosa';
   elements.scrubber.value = String(state.second);
+  if (state.traces.has(result.algorithm)) renderDecision();
   for (const cell of elements.timeline.querySelectorAll('[data-time]')) {
     cell.classList.toggle('current', Number(cell.dataset.time) === state.second);
   }
