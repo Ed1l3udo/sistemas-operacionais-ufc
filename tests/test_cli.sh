@@ -16,6 +16,18 @@ grep -q '"seed":42' "$TMP_DIR/result.json"
 grep -q 'Round-Robin' "$TMP_DIR/result.txt"
 grep -q 'Trocas de contexto' "$TMP_DIR/result.txt"
 
+"$BIN" --config "$CONFIG" --algorithm srtf --format json --trace < "$INPUT" > "$TMP_DIR/trace.json"
+grep -q '"decisions":\[' "$TMP_DIR/trace.json"
+grep -q '"reason":"dispatch"' "$TMP_DIR/trace.json"
+grep -q '"ready":\[' "$TMP_DIR/trace.json"
+
+if "$BIN" --config "$CONFIG" --algorithm all --format json --trace < "$INPUT" > "$TMP_DIR/out" 2> "$TMP_DIR/error"; then
+    echo 'rastreamento de todos os algoritmos foi aceito' >&2
+    exit 1
+fi
+test ! -s "$TMP_DIR/out"
+grep -q 'um único algoritmo' "$TMP_DIR/error"
+
 if printf '0 0 1\n' | "$BIN" --config "$CONFIG" --format json > "$TMP_DIR/out" 2> "$TMP_DIR/error"; then
     echo 'entrada inválida foi aceita' >&2
     exit 1

@@ -16,11 +16,23 @@ static int failures = 0;
 
 static SimulationResult run(const ProcessSpec *items, size_t count, Algorithm algorithm,
                             int quantum, int aging, uint32_t seed) {
-    SchedulerConfig config = {quantum, aging, seed};
+    SchedulerConfig config = {quantum, aging, seed, false};
     SimulationResult result;
     char error[SCHEDULER_ERROR_SIZE];
     if (!simulate(items, count, &config, algorithm, &result, error, sizeof(error))) {
         fprintf(stderr, "simulação falhou: %s\n", error);
+        exit(2);
+    }
+    return result;
+}
+
+static SimulationResult run_traced(const ProcessSpec *items, size_t count, Algorithm algorithm,
+                                   int quantum, int aging, uint32_t seed) {
+    SchedulerConfig config = {quantum, aging, seed, true};
+    SimulationResult result;
+    char error[SCHEDULER_ERROR_SIZE];
+    if (!simulate(items, count, &config, algorithm, &result, error, sizeof(error))) {
+        fprintf(stderr, "simulação rastreada falhou: %s\n", error);
         exit(2);
     }
     return result;
@@ -133,6 +145,23 @@ static void test_reproducible_tie(void) {
     free_result(&second);
 }
 
+static void test_decision_trace(void) {
+    ProcessSpec items[] = {{1, 0, 4, 2}, {2, 1, 1, 1}};
+    SimulationResult result = run_traced(items, 2, ALG_SRTF, 2, 1, 42);
+    CHECK(result.decision_length == result.timeline_length, "uma decisão por segundo");
+    CHECK(result.decisions[0].selected == 0, "rastreamento registra despacho inicial");
+    CHECK(result.decisions[1].cpu_before == 0 && result.decisions[1].selected == 1,
+          "rastreamento registra processos antes e depois da preempção");
+    CHECK(result.decisions[1].reason == DECISION_PREEMPT,
+          "rastreamento classifica preempção");
+    CHECK(result.decisions[1].candidates[0].remaining == 3,
+          "rastreamento usa o tempo restante antes da decisão");
+    CHECK(result.decisions[1].candidates[1].remaining == 1,
+          "rastreamento inclui a chegada concorrente");
+    CHECK(result.decisions[1].completes, "rastreamento registra conclusão após o segundo");
+    free_result(&result);
+}
+
 static void test_process_parser(void) {
     FILE *input = tmpfile();
     ProcessSpec *items = NULL;
@@ -188,6 +217,7 @@ int main(void) {
     test_priority_rr_aging();
     test_metrics();
     test_reproducible_tie();
+    test_decision_trace();
     test_process_parser();
     if (failures) {
         fprintf(stderr, "%d teste(s) falharam\n", failures);

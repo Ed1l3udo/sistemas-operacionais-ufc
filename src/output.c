@@ -2,6 +2,16 @@
 
 #include <stdio.h>
 
+static const char *decision_reason_key(DecisionReason reason) {
+    static const char *keys[] = {"idle", "dispatch", "continue", "preempt", "quantum"};
+    return reason >= DECISION_IDLE && reason <= DECISION_QUANTUM ? keys[reason] : "idle";
+}
+
+static const char *decision_choice_key(DecisionChoice choice) {
+    static const char *keys[] = {"none", "criterion", "current", "remaining", "random", "fifo"};
+    return choice >= CHOICE_NONE && choice <= CHOICE_FIFO ? keys[choice] : "none";
+}
+
 void print_text_result(FILE *stream, const ProcessSpec *processes, size_t count,
                        const SimulationResult *result) {
     size_t index, time;
@@ -35,7 +45,7 @@ void print_text_result(FILE *stream, const ProcessSpec *processes, size_t count,
 }
 
 static void print_json_result(FILE *stream, const ProcessSpec *processes, size_t count,
-                              const SimulationResult *result) {
+                              const SchedulerConfig *config, const SimulationResult *result) {
     size_t index;
     fprintf(stream,
             "{\"algorithm\":\"%s\",\"label\":\"%s\","
@@ -65,7 +75,48 @@ static void print_json_result(FILE *stream, const ProcessSpec *processes, size_t
                     processes[result->timeline[index]].id);
         }
     }
-    fputs("]}", stream);
+    fputc(']', stream);
+    if (result->decisions) {
+        fputs(",\"decisions\":[", stream);
+        for (index = 0; index < result->decision_length; index++) {
+            const DecisionSnapshot *decision = &result->decisions[index];
+            size_t candidate_index;
+            if (index) fputc(',', stream);
+            fprintf(stream,
+                    "{\"time\":%zu,\"cpuBefore\":", index);
+            if (decision->cpu_before < 0) fputs("null", stream);
+            else fprintf(stream, "\"P%d\"", processes[decision->cpu_before].id);
+            fputs(",\"selected\":", stream);
+            if (decision->selected < 0) fputs("null", stream);
+            else fprintf(stream, "\"P%d\"", processes[decision->selected].id);
+            fputs(",\"returned\":", stream);
+            if (decision->returned < 0) fputs("null", stream);
+            else fprintf(stream, "\"P%d\"", processes[decision->returned].id);
+            fprintf(stream,
+                    ",\"reason\":\"%s\",\"choice\":\"%s\","
+                    "\"quantumUsed\":%d,\"quantumLimit\":%d,"
+                    "\"completes\":%s,\"quantumExpires\":%s,\"ready\":[",
+                    decision_reason_key(decision->reason), decision_choice_key(decision->choice),
+                    decision->quantum_used, config->quantum,
+                    decision->completes ? "true" : "false",
+                    decision->quantum_expires ? "true" : "false");
+            for (candidate_index = 0; candidate_index < decision->candidate_count;
+                 candidate_index++) {
+                const DecisionCandidate *candidate = &decision->candidates[candidate_index];
+                if (candidate_index) fputc(',', stream);
+                fprintf(stream,
+                        "{\"id\":\"P%d\",\"remaining\":%d,\"priority\":%d,"
+                        "\"effectivePriority\":%d,\"readyWait\":%d,\"readyOrder\":%llu}",
+                        processes[candidate->process_index].id, candidate->remaining,
+                        processes[candidate->process_index].priority,
+                        candidate->effective_priority, candidate->ready_wait,
+                        (unsigned long long)candidate->ready_order);
+            }
+            fputs("]}", stream);
+        }
+        fputc(']', stream);
+    }
+    fputc('}', stream);
 }
 
 void print_json(FILE *stream, const ProcessSpec *processes, size_t count,
@@ -83,7 +134,7 @@ void print_json(FILE *stream, const ProcessSpec *processes, size_t count,
     fputs("],\"results\":[", stream);
     for (index = 0; index < result_count; index++) {
         if (index) fputc(',', stream);
-        print_json_result(stream, processes, count, &results[index]);
+        print_json_result(stream, processes, count, config, &results[index]);
     }
     fputs("]}\n", stream);
 }

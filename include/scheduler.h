@@ -20,6 +20,7 @@ typedef struct {
     int quantum;
     int aging;
     uint32_t seed;
+    bool trace;
 } SchedulerConfig;
 
 typedef enum {
@@ -41,11 +42,51 @@ typedef struct {
     int response;
 } ProcessMetrics;
 
+typedef enum {
+    DECISION_IDLE,
+    DECISION_DISPATCH,
+    DECISION_CONTINUE,
+    DECISION_PREEMPT,
+    DECISION_QUANTUM
+} DecisionReason;
+
+typedef enum {
+    CHOICE_NONE,
+    CHOICE_CRITERION,
+    CHOICE_CURRENT,
+    CHOICE_REMAINING,
+    CHOICE_RANDOM,
+    CHOICE_FIFO
+} DecisionChoice;
+
+typedef struct {
+    int process_index;
+    int remaining;
+    int effective_priority;
+    int ready_wait;
+    uint64_t ready_order;
+} DecisionCandidate;
+
+typedef struct {
+    int cpu_before;
+    int selected;
+    int returned;
+    int quantum_used;
+    bool completes;
+    bool quantum_expires;
+    DecisionReason reason;
+    DecisionChoice choice;
+    DecisionCandidate *candidates;
+    size_t candidate_count;
+} DecisionSnapshot;
+
 typedef struct {
     Algorithm algorithm;
     ProcessMetrics *metrics;
     int *timeline;
     size_t timeline_length;
+    DecisionSnapshot *decisions;
+    size_t decision_length;
     double average_turnaround;
     double average_waiting;
     double average_response;
