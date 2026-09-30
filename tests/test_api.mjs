@@ -101,6 +101,30 @@ test('API filtra os algoritmos selecionados', async () => {
   assert.deepEqual(response.body.results.map((result) => result.algorithm), ['srtf', 'rr']);
 });
 
+test('API entrega rastreamento de um algoritmo produzido pelo motor C', async () => {
+  const response = await request('POST', '/api/trace', {
+    processes: '0 4 2\n1 1 1\n', quantum: 2, aging: 1, seed: 42, algorithms: ['srtf'],
+  });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.results.length, 1);
+  const result = response.body.results[0];
+  assert.equal(result.algorithm, 'srtf');
+  assert.equal(result.decisions.length, result.timeline.length);
+  assert.deepEqual(
+    { before: result.decisions[1].cpuBefore, selected: result.decisions[1].selected },
+    { before: 'P1', selected: 'P2' },
+  );
+  assert.equal(result.decisions[1].reason, 'preempt');
+});
+
+test('API rejeita rastreamento de vários algoritmos', async () => {
+  const response = await request('POST', '/api/trace', {
+    processes: '0 1 1\n', quantum: 2, aging: 0, seed: 7, algorithms: ['fcfs', 'rr'],
+  });
+  assert.equal(response.status, 400);
+  assert.equal(response.body.error.details.field, 'algorithms');
+});
+
 test('API estrutura erros de transporte e do motor', async () => {
   const invalidJson = await request('POST', '/api/simulate', '{', 'application/json');
   assert.equal(invalidJson.status, 400);

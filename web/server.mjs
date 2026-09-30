@@ -115,14 +115,26 @@ function validatePayload(payload) {
   return { processes: payload.processes, quantum, aging, seed, algorithms };
 }
 
-function executeScheduler(binaryPath, configPath, payload) {
+function validateTracePayload(payload) {
+  const validated = validatePayload(payload);
+  if (validated.algorithms.length !== 1) {
+    throw new ApiError(400, 'INVALID_REQUEST', 'O rastreamento exige exatamente um algoritmo.', {
+      field: 'algorithms',
+    });
+  }
+  return validated;
+}
+
+function executeScheduler(binaryPath, configPath, payload, trace = false) {
   return new Promise((resolve, reject) => {
-    const child = spawn(binaryPath, [
+    const argumentsList = [
       '--config', configPath,
-      '--algorithm', 'all',
+      '--algorithm', trace ? payload.algorithms[0] : 'all',
       '--format', 'json',
       '--seed', String(payload.seed),
-    ], { shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
+    ];
+    if (trace) argumentsList.push('--trace');
+    const child = spawn(binaryPath, argumentsList, { shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
     const stdout = [];
     const stderr = [];
     let outputSize = 0;
@@ -180,7 +192,7 @@ function executeScheduler(binaryPath, configPath, payload) {
   });
 }
 
-async function simulate(binaryPath, payload) {
+async function simulate(binaryPath, payload, trace = false) {
   const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'scheduler-'));
   const configPath = path.join(temporaryDirectory, 'config.txt');
   try {
@@ -188,7 +200,7 @@ async function simulate(binaryPath, payload) {
       encoding: 'utf8',
       mode: 0o600,
     });
-    return await executeScheduler(binaryPath, configPath, payload);
+    return await executeScheduler(binaryPath, configPath, payload, trace);
   } finally {
     await rm(temporaryDirectory, { recursive: true, force: true });
   }
@@ -223,6 +235,15 @@ export function createAppServer({ binaryPath = DEFAULT_BINARY } = {}) {
         }
         const payload = validatePayload(await readJson(request));
         sendJson(response, 200, await simulate(binaryPath, payload));
+        return;
+      }
+      if (pathname === '/api/trace') {
+        if (request.method !== 'POST') {
+          response.setHeader('Allow', 'POST');
+          throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Use POST neste endpoint.');
+        }
+        const payload = validateTracePayload(await readJson(request));
+        sendJson(response, 200, await simulate(binaryPath, payload, true));
         return;
       }
       if (await serveStatic(request, response)) return;
