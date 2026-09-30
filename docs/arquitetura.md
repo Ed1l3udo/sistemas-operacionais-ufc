@@ -20,8 +20,8 @@ O cabeçalho `include/scheduler.h` é o contrato entre os módulos:
   simulação;
 - `SchedulerConfig`: quantum, taxa de envelhecimento e semente pseudoaleatória;
 - `ProcessMetrics`: primeiro despacho, conclusão, turnaround, espera e resposta;
-- `SimulationResult`: algoritmo, métricas individuais, timeline, médias e trocas de
-  contexto.
+- `SimulationResult`: algoritmo, métricas individuais, timeline, médias, trocas de
+  contexto e, quando solicitado, fotografias das decisões.
 
 `src/input.c` valida a configuração e as linhas de processos com detecção de
 overflow. `src/scheduler.c` mantém os estados internos `NEW`, `READY`, `RUNNING` e
@@ -129,6 +129,12 @@ de algoritmos. O servidor:
 6. interpreta o JSON, filtra os algoritmos solicitados e remove o temporário em um
    bloco `finally`.
 
+`POST /api/trace` aceita a mesma carga com exatamente um algoritmo e executa a CLI
+com `--trace`. A resposta acrescenta uma fotografia para cada segundo, contendo o
+estado imediatamente anterior à execução. A interface solicita esse conteúdo sob
+demanda quando o usuário seleciona uma política; a comparação inicial continua
+usando o JSON compacto de `/api/simulate`.
+
 Erros têm a forma `{"error":{"code":"...","message":"..."}}` e status HTTP
 compatível. O servidor também aplica CSP, `nosniff` e política de referrer aos
 arquivos estáticos.
@@ -146,8 +152,10 @@ playback possui reinício, passo anterior, reprodução/pausa, passo seguinte,
 scrubber e três velocidades. A única animação temporal da aplicação ocorre nesses
 controles.
 
-Uma proposta de indicadores visuais específicos para a decisão de cada política,
-ainda não implementada, está em
+Os indicadores de decisão específicos de cada política ficam entre o playback e a
+timeline. Eles exibem fila de chegada, comparadores de tempo restante, níveis de
+prioridade, fila circular/quantum ou prioridade efetiva/aging conforme o algoritmo.
+O desenho, contrato e critérios de aceite estão em
 [`indicadores-decisoes-escalonador.md`](indicadores-decisoes-escalonador.md).
 
 ## 8. Testes e limites
@@ -160,5 +168,7 @@ resposta da API é igual ao JSON produzido diretamente pelo executável.
 
 Para limitar uso acidental de memória, uma simulação aceita até 10.000 processos e
 uma timeline de até 10.000.000 de segundos. Na API, os limites adicionais de corpo,
-tempo e saída protegem o servidor local.
+tempo e saída protegem o servidor local. O rastreamento limita o produto entre
+processos e duração máxima a 1.000.000 de estados; uma simulação normal não recebe
+esse limite adicional.
 

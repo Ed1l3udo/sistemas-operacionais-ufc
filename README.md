@@ -45,6 +45,21 @@ Para receber o contrato usado pela interface web:
   --seed 42 < examples/processes.txt
 ```
 
+Para inspecionar as decisões de uma política segundo a segundo, acrescente
+`--trace` a uma execução JSON de um único algoritmo:
+
+```sh
+./build/scheduler \
+  --config examples/config.txt \
+  --algorithm srtf \
+  --format json \
+  --trace < examples/processes.txt
+```
+
+O rastreamento inclui CPU anterior, processo escolhido, candidatos, tempos
+restantes, prioridades, estado do aging e consumo do quantum. Ele é opcional
+para manter a saída normal compacta.
+
 Os valores aceitos por `--algorithm` são `all`, `fcfs`, `sjf`, `srtf`,
 `priority-np`, `priority-p`, `rr` e `priority-rr`. O formato pode ser `text` ou
 `json`. A semente é opcional e vale `42` por padrão.
@@ -81,8 +96,9 @@ PORT=8080 make web
 
 A tela mantém a tabela editável sincronizada com a entrada textual, compara os
 algoritmos selecionados e oferece controles para reproduzir, pausar, avançar,
-retroceder e reiniciar a timeline. Texto inválido não substitui a última tabela
-válida.
+retroceder e reiniciar a timeline. Para cada política, um painel específico mostra
+a fila ou comparação que levou à decisão corrente. Texto inválido não substitui a
+última tabela válida.
 
 ## Testes
 

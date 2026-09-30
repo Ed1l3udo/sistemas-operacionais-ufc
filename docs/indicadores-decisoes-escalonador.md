@@ -1,7 +1,7 @@
 # Projeto dos indicadores de decisão do escalonador
 
-Status: proposta de interface. Nenhum indicador ou contrato de rastreamento está
-implementado nesta etapa.
+Status: implementado. Os sete indicadores usam fotografias produzidas pelo motor
+C e são carregados sob demanda para a política selecionada.
 
 ## Objetivo e posição na tela
 
@@ -91,18 +91,19 @@ fatia terminar ou o processo concluir, mesmo que um pronto alcance prioridade
 efetiva melhor. No próximo despacho do processo, o medidor zera e a prioridade
 volta ao valor estático. A prioridade efetiva nunca cai abaixo de 1.
 
-## Contrato necessário para uma futura implementação
+## Contrato implementado
 
 O JSON atual informa processos, configuração, métricas e apenas o processo que
 executou em cada segundo. Ele não informa toda a fila nem a razão do desempate.
-Os estados de decisão deverão vir do motor em C; o JavaScript só apresentará os
+Os estados de decisão vêm do motor em C; o JavaScript só apresenta os
 valores recebidos. A fotografia de `t` representa, nesta ordem: admitir chegadas,
 recolocar na fila um quantum expirado no instante anterior, escolher ou manter a
 CPU, executar `[t, t+1)` e atualizar espera/conclusão. O rastreamento proposto
-deve fornecer, para o algoritmo e o instante solicitados:
+fornece, para o algoritmo e cada instante:
 
-- `time`, `arrivals` e `cpuBefore`: estado imediatamente **antes** de escolher,
-  depois de admitir chegadas e recolocar o processo cujo quantum expirou;
+- `time` e `cpuBefore`: estado imediatamente **antes** de escolher, depois de
+  admitir chegadas e recolocar o processo cujo quantum expirou; as chegadas são
+  obtidas da lista imutável de processos pelo mesmo `time`;
 - `ready`: IDs em ordem relevante para a política, com tempo restante,
   prioridade estática/efetiva, tempo de espera para aging e posição FIFO quando
   aplicáveis;
@@ -110,18 +111,19 @@ deve fornecer, para o algoritmo e o instante solicitados:
   preferência pela CPU, menor tempo restante ou sorteio quando usados;
 - `quantumUsed` e `quantumLimit` quando houver fatia, com convenção explícita
   sobre valores antes da execução de `[t, t+1)`;
-- `eventsBefore` e `eventsAfter`: chegada/retorno à fila antes da escolha e
-  despacho, continuidade, preempção, expiração, conclusão ou ociosidade conforme
-  a fase; pode haver mais de um evento no mesmo instante.
+- `reason`, `returned`, `completes` e `quantumExpires`: despacho, continuidade,
+  preempção, retorno após quantum, conclusão e expiração de fatia;
+- `choice`: critério principal, preferência pelo processo atual, menor tempo
+  restante, sorteio reproduzível ou ordem FIFO.
 
-O resultado deve ser determinístico ao voltar no tempo: não se deve inferir a fila
-pela animação anterior nem consumir um novo sorteio ao usar o scrubber. Para não
-multiplicar o JSON de `--algorithm all` por todas as decisões de todos os processos,
-o rastreamento deve ser opcional e limitado ao algoritmo/intervalo de instantes
-em exibição. A forma exata da extensão CLI/API fica para a implementação; o
-contrato atual permanece válido.
+O resultado é determinístico ao voltar no tempo: a fila não é inferida pela
+animação anterior e o scrubber não consome um novo sorteio. `--trace` exige JSON e
+um único algoritmo. A interface usa `/api/trace` somente para a política aberta e
+mantém os resultados em cache durante a simulação. O limite de 1.000.000 de estados
+de processo impede que o rastreamento opcional ocupe memória sem controle; o
+contrato JSON sem `--trace` permanece válido.
 
-## Regras de apresentação e aceite futuro
+## Regras de apresentação e aceite
 
 - Um único destaque identifica quem recebeu a CPU em `t`; valores e frase curta
   explicam a escolha. A timeline continua sendo a referência temporal.
