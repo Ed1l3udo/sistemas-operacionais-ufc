@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-BIN=./build/scheduler
+BIN=./build/scheduler${EXEEXT:-}
 CONFIG=examples/config.txt
 INPUT=examples/processes.txt
 TMP_DIR=$(mktemp -d)

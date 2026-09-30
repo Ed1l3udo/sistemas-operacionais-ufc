@@ -137,6 +137,7 @@ static void test_process_parser(void) {
     FILE *input = tmpfile();
     ProcessSpec *items = NULL;
     size_t count = 0;
+    size_t index;
     char error[SCHEDULER_ERROR_SIZE];
     CHECK(input != NULL, "tmpfile disponível");
     if (!input) return;
@@ -144,6 +145,25 @@ static void test_process_parser(void) {
     rewind(input);
     CHECK(read_processes(input, &items, &count, error, sizeof(error)), "parser aceita chegadas desordenadas");
     CHECK(count == 2 && items[0].id == 1 && items[0].arrival == 3, "ordem original define IDs");
+    free(items);
+    fclose(input);
+
+    items = NULL;
+    input = tmpfile();
+    CHECK(input != NULL, "tmpfile disponível para linha longa");
+    if (!input) return;
+    fputc('\n', input);
+    fputc('#', input);
+    for (index = 0; index < 300; index++) fputc('x', input);
+    fputc('\n', input);
+    fputs("2 3 4", input);
+    rewind(input);
+    bool parsed = read_processes(input, &items, &count, error, sizeof(error));
+    CHECK(parsed, "parser aceita linha longa e última linha sem quebra");
+    if (parsed) {
+        CHECK(count == 1 && items[0].arrival == 2 && items[0].burst == 3,
+              "última linha sem quebra preserva os valores");
+    }
     free(items);
     fclose(input);
 

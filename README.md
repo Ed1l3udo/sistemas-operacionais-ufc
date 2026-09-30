@@ -13,6 +13,12 @@ JSON.
 
 Não há dependências externas para instalar.
 
+No Windows, use o terminal **MSYS2 UCRT64**, com GCC, GNU Make e Node.js
+disponíveis no `PATH`. Nesse terminal, `make` pode ser chamado como
+`mingw32-make`. Os exemplos abaixo usam `make`; substitua pelo nome disponível
+no seu ambiente. O executável gerado no Windows é `build/scheduler.exe`; no
+Linux é `build/scheduler`.
+
 ## Uso rápido
 
 Compile e execute todos os algoritmos com o exemplo do enunciado:
@@ -25,6 +31,9 @@ make
   --format text \
   --seed 42 < examples/processes.txt
 ```
+
+No Windows, troque `./build/scheduler` por `./build/scheduler.exe` nos comandos
+da CLI. `make test` e `make web` escolhem automaticamente o nome adequado.
 
 Para receber o contrato usado pela interface web:
 
@@ -88,7 +97,8 @@ somente uma porta efêmera em `127.0.0.1`.
 
 `make sanitize` recompila os testes com AddressSanitizer e
 UndefinedBehaviorSanitizer. A detecção de leaks do ASan fica desabilitada para
-compatibilidade com ambientes executados sob `ptrace`.
+compatibilidade com ambientes executados sob `ptrace`. Execute esse alvo no Linux:
+o GCC do MSYS2 UCRT64 não inclui as bibliotecas desses sanitizadores.
 
 ## Estrutura
 

@@ -1,5 +1,3 @@
-#define _POSIX_C_SOURCE 200809L
-
 #include "scheduler.h"
 
 #include <ctype.h>
@@ -15,6 +13,50 @@ static void set_error(char *error, size_t size, const char *format, ...) {
     va_start(args, format);
     vsnprintf(error, size, format, args);
     va_end(args);
+}
+
+/* Retorna 1 para uma linha, 0 para EOF e -1 para erro. Aceita EOF sem '\n'. */
+static int read_line(FILE *stream, char **line, size_t *capacity,
+                     char *error, size_t error_size) {
+    size_t length = 0;
+    int character;
+
+    if (*capacity == 0) {
+        *line = malloc(128);
+        if (!*line) {
+            set_error(error, error_size, "memória insuficiente para ler uma linha");
+            return -1;
+        }
+        *capacity = 128;
+    }
+
+    while ((character = fgetc(stream)) != EOF) {
+        if (length + 1 >= *capacity) {
+            size_t next;
+            char *grown;
+            if (*capacity > SIZE_MAX / 2) {
+                set_error(error, error_size, "linha de entrada muito longa");
+                return -1;
+            }
+            next = *capacity ? *capacity * 2 : 128;
+            grown = realloc(*line, next);
+            if (!grown) {
+                set_error(error, error_size, "memória insuficiente para ler uma linha");
+                return -1;
+            }
+            *line = grown;
+            *capacity = next;
+        }
+        if (character == '\n') break;
+        (*line)[length++] = (char)character;
+    }
+    if (ferror(stream)) {
+        set_error(error, error_size, "erro durante a leitura da entrada");
+        return -1;
+    }
+    if (character == EOF && length == 0) return 0;
+    (*line)[length] = '\0';
+    return 1;
 }
 
 static char *trim(char *text) {
@@ -64,7 +106,7 @@ bool read_config(const char *path, SchedulerConfig *config, char *error, size_t 
     FILE *file = fopen(path, "r");
     char *line = NULL;
     size_t capacity = 0;
-    ssize_t length;
+    int line_status;
     unsigned line_number = 0;
     bool has_quantum = false, has_aging = false;
 
@@ -72,10 +114,9 @@ bool read_config(const char *path, SchedulerConfig *config, char *error, size_t 
         set_error(error, error_size, "não foi possível abrir a configuração '%s': %s", path, strerror(errno));
         return false;
     }
-    while ((length = getline(&line, &capacity, file)) >= 0) {
+    while ((line_status = read_line(file, &line, &capacity, error, error_size)) > 0) {
         char *content, *colon, *key, *value;
         int parsed;
-        (void)length;
         line_number++;
         content = trim(line);
         if (*content == '\0' || *content == '#') continue;
@@ -110,6 +151,7 @@ bool read_config(const char *path, SchedulerConfig *config, char *error, size_t 
             goto fail;
         }
     }
+    if (line_status < 0) goto fail;
     free(line);
     fclose(file);
     if (!has_quantum || !has_aging) {
@@ -133,13 +175,12 @@ bool read_processes(FILE *stream, ProcessSpec **processes, size_t *count,
     ProcessSpec *items = NULL;
     size_t used = 0, allocated = 0, line_capacity = 0;
     char *line = NULL;
-    ssize_t length;
+    int line_status;
     unsigned line_number = 0;
 
-    while ((length = getline(&line, &line_capacity, stream)) >= 0) {
+    while ((line_status = read_line(stream, &line, &line_capacity, error, error_size)) > 0) {
         int arrival, burst, priority;
         char *content;
-        (void)length;
         line_number++;
         content = trim(line);
         if (*content == '\0' || *content == '#') continue;
@@ -170,12 +211,8 @@ bool read_processes(FILE *stream, ProcessSpec **processes, size_t *count,
         items[used] = (ProcessSpec){(int)used + 1, arrival, burst, priority};
         used++;
     }
+    if (line_status < 0) goto fail;
     free(line);
-    if (ferror(stream)) {
-        set_error(error, error_size, "erro durante a leitura da entrada");
-        free(items);
-        return false;
-    }
     if (used == 0) {
         set_error(error, error_size, "nenhum processo foi informado");
         free(items);
