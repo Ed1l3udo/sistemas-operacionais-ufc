@@ -295,9 +295,9 @@ function arrivalsAt(time) {
   return state.data.processes.filter((process) => process.arrival === time).map((process) => process.id);
 }
 
-function processCard(candidate, { selected = false, detail = '', accent = '' } = {}) {
+function processCard(candidate, { selected = false, detail = '' } = {}) {
   if (!candidate) return '<div class="process-card empty"><strong>CPU ociosa</strong><span>sem processo pronto</span></div>';
-  return `<div class="process-card ${selected ? 'selected' : ''}" data-motion-key="process-${candidate.id}" ${accent ? `style="--card-accent:${accent}"` : ''}>
+  return `<div class="process-card ${selected ? 'selected' : ''}" data-motion-key="process-${candidate.id}">
     <strong>${candidate.id}</strong>
     <span>${detail}</span>
   </div>`;
@@ -497,6 +497,15 @@ function animateDecisionMotion(previous, algorithm, decision, revision) {
   animatePolicyDecision(previous, algorithm, decision);
 }
 
+function applyDecisionDynamicStyles() {
+  elements.decisionVisual.querySelectorAll('[data-motion-progress]').forEach((element) => {
+    element.style.width = `${Number(element.dataset.motionValue)}%`;
+  });
+  elements.decisionVisual.querySelectorAll('[data-priority-level]').forEach((element) => {
+    element.style.setProperty('--priority-level', element.dataset.priorityLevel);
+  });
+}
+
 function renderFcfs(decision) {
   const ordered = [...decision.ready].sort((left, right) => {
     const arrival = processSpec(left.id).arrival - processSpec(right.id).arrival;
@@ -525,7 +534,7 @@ function remainingBars(decision, preemptive) {
     ${visible.shown.map((candidate) => {
       const percentage = Math.max(8, candidate.remaining / maximum * 100);
       return `<div class="remaining-row ${candidate.id === decision.selected ? 'winner' : ''}" data-motion-key="remaining-${candidate.id}">
-      <strong>${candidate.id}</strong><div class="remaining-track"><span data-motion-progress="remaining-${candidate.id}" data-motion-value="${percentage}" style="width:${percentage}%"></span></div><b>${candidate.remaining} s</b>
+      <strong>${candidate.id}</strong><div class="remaining-track"><span data-motion-progress="remaining-${candidate.id}" data-motion-value="${percentage}"></span></div><b>${candidate.remaining} s</b>
     </div>`;
     }).join('')}
     ${overflowLabel(visible.hidden)}
@@ -537,7 +546,7 @@ function priorityLadder(decision, preemptive) {
   const visible = compactCandidates(ordered);
   return `<div class="priority-ladder ${preemptive && decision.reason === 'preempt' ? 'has-preemption' : ''}">
     <div class="ladder-scale"><span>prioridade mais alta</span><span>menor número</span></div>
-    ${visible.shown.map((candidate) => `<div class="priority-step ${candidate.id === decision.selected ? 'winner' : ''}" data-motion-key="priority-${candidate.id}" style="--priority-level:${candidate.priority}">
+    ${visible.shown.map((candidate) => `<div class="priority-step ${candidate.id === decision.selected ? 'winner' : ''}" data-motion-key="priority-${candidate.id}" data-priority-level="${candidate.priority}">
       <strong>${candidate.id}</strong><span>prioridade ${candidate.priority}</span><small>${candidate.remaining} s restantes</small>
     </div>`).join('')}
     ${overflowLabel(visible.hidden)}
@@ -548,7 +557,7 @@ function quantumMeter(decision) {
   const used = decision.selected ? Math.min(decision.quantumLimit, decision.quantumUsed + 1) : 0;
   const percentage = decision.quantumLimit ? used / decision.quantumLimit * 100 : 0;
   return `<div class="quantum-meter"><div><span>Fatia atual</span><strong>${used}/${decision.quantumLimit} s</strong></div>
-    <div class="quantum-track"><span data-motion-progress="quantum" data-motion-value="${percentage}" style="width:${percentage}%"></span></div>
+    <div class="quantum-track"><span data-motion-progress="quantum" data-motion-value="${percentage}"></span></div>
   </div>`;
 }
 
@@ -581,7 +590,7 @@ function renderPriorityRoundRobin(decision) {
       return `<div class="aging-card ${candidate.id === decision.selected ? 'winner' : ''}" data-motion-key="aging-${candidate.id}" data-motion-score="${candidate.effectivePriority}">
         <div><strong>${candidate.id}</strong><span>${candidate.priority} → <b>${candidate.effectivePriority}</b></span></div>
         <small>${candidate.readyWait} s de espera · ordem ${candidate.readyOrder + 1}</small>
-        <div class="aging-track"><span data-motion-progress="aging-${candidate.id}" data-motion-value="${progress}" style="width:${progress}%"></span></div>
+        <div class="aging-track"><span data-motion-progress="aging-${candidate.id}" data-motion-value="${progress}"></span></div>
       </div>`;
     }).join('')}</div>${overflowLabel(visible.hidden)}
   </div>`;
@@ -638,6 +647,7 @@ function renderDecision() {
     && state.lastDecisionView.time === decision.time;
   const previous = sameView ? null : captureDecisionMotion();
   elements.decisionVisual.innerHTML = content;
+  applyDecisionDynamicStyles();
   elements.decisionVisual.dataset.algorithm = result.algorithm;
   elements.decisionVisual.dataset.time = String(decision.time);
   elements.decisionVisual.dataset.selected = decision.selected || '';
