@@ -35,7 +35,7 @@ Uma ordem de leitura recomendada é:
 3. `src/input.c`, para acompanhar a validação da entrada;
 4. `src/scheduler.c`, onde estão os algoritmos e as métricas;
 5. `src/output.c`, para ver como os resultados são expostos;
-6. testes, servidor e interface, para observar os consumidores do motor.
+6. servidor e interface, para observar os consumidores do motor.
 
 ## 2. Núcleo em C
 
@@ -333,50 +333,15 @@ adiciona `include/` à busca de cabeçalhos. Os objetos de `src/` são criados e
 Os alvos principais são:
 
 - `all`: produz o executável;
-- `test`: compila o motor e o teste C, depois executa testes C, CLI e API;
-- `sanitize`: recompila o teste com AddressSanitizer e
-  UndefinedBehaviorSanitizer, executa-o e restaura um build normal;
 - `web`: compila o binário e inicia `web/server.mjs`;
 - `clean`: remove `build/`.
 
 ### `examples/processes.txt` e `examples/config.txt`
 
-São uma carga e uma configuração prontas para uso nos comandos do README. Eles
-também servem aos testes da CLI, evitando duplicação de uma entrada de referência.
+São uma carga e uma configuração prontas para uso nos comandos do README e para
+conferir manualmente o comportamento descrito no enunciado.
 
-## 4. Testes
-
-### `tests/test_scheduler.c`
-
-Testa diretamente a API C. Os auxiliares `run` e `run_traced` montam uma
-configuração, chamam `simulate` e encerram o teste se o motor não puder executar.
-`expect_timeline` compara o resultado segundo a segundo com uma string manual, na
-qual `.` representa ociosidade e os dígitos representam processos.
-
-Os cenários cobrem processo único, seleção e preempção, ociosidade, chegadas fora
-de ordem, Round-Robin, aging, métricas, sorteio reproduzível, trace e erros do
-parser. Cada resultado é liberado com `free_result`.
-
-### `tests/test_cli.sh`
-
-É um teste de integração da CLI. Executa saídas JSON e texto, valida o trace e
-confirma que entradas inválidas falham, não contaminam `stdout` e geram mensagens
-esperadas em `stderr`. Um diretório temporário recebe os resultados e é removido
-por `trap`.
-
-### `tests/test_api.mjs`
-
-Usa o executor de testes nativo do Node.js. O servidor sobe em uma porta efêmera e
-as requisições verificam que `/api/simulate` devolve o mesmo JSON do executável,
-que filtros e trace funcionam, que erros são estruturados e que os arquivos
-estáticos recebem cabeçalhos seguros.
-
-### `tests/fixtures/`
-
-`config-missing-aging.txt` e `config-zero-quantum.txt` são configurações
-intencionalmente inválidas usadas para confirmar as mensagens e códigos de erro.
-
-## 5. Camada web, resumidamente
+## 4. Camada web, resumidamente
 
 ### `web/server.mjs`
 
@@ -412,22 +377,19 @@ Concentra tipografia, cores, layout responsivo, tabelas, controles, indicadores 
 decisão e transições. Também trata telas estreitas, foco de teclado e a preferência
 `prefers-reduced-motion`.
 
-## 6. Documentação e metadados
+## 5. Documentação e metadados
 
-- `README.md`: apresentação geral, compilação, execução e testes;
+- `README.md`: apresentação geral, compilação e execução;
 - `docs/arquitetura.md`: regras formais dos algoritmos, métricas e decisões de
   arquitetura;
-- `docs/indicadores-decisoes-escalonador.md`: contrato visual e critérios dos
-  indicadores de decisão;
+- `docs/guia-de-codigo.md`: explicação arquivo a arquivo da implementação;
 - `Tarefa 01 - Escalonamento de Processos.pdf`: enunciado acadêmico que contextualiza
   o projeto;
 - `AGENTS.md`: convenções de desenvolvimento e decisões obrigatórias do
   repositório;
-- `.gitignore`: exclui build, objetos, logs e arquivos locais do sistema;
-- `.gitattributes`: força finais de linha LF nos scripts shell para preservar sua
-  execução em ambientes Unix.
+- `.gitignore`: exclui build, objetos, logs e arquivos locais do sistema.
 
-## 7. Caminho completo de uma simulação
+## 6. Caminho completo de uma simulação
 
 Para consolidar a leitura, considere o comando com `--algorithm srtf`:
 

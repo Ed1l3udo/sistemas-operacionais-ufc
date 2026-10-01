@@ -20,14 +20,13 @@ ser usada de duas formas:
 - contagem de trocas de contexto e timeline completa da CPU;
 - desempates pseudoaleatórios reproduzíveis por semente;
 - rastreamento opcional das decisões tomadas pelo motor;
-- comparação visual dos algoritmos e reprodução da timeline no navegador;
-- testes unitários do motor, testes da CLI e testes da API local.
+- comparação visual dos algoritmos e reprodução da timeline no navegador.
 
 ## Requisitos
 
 - GCC com suporte a C17;
 - GNU Make;
-- Node.js 18 ou mais recente, somente para a interface web e os testes da API.
+- Node.js 18 ou mais recente, somente para a interface web.
 
 O projeto não usa bibliotecas externas nem exige instalação por gerenciador de
 pacotes.
@@ -163,32 +162,11 @@ A página permite editar processos, selecionar algoritmos, comparar métricas e
 percorrer a timeline. O navegador não reimplementa os algoritmos: ele envia a
 entrada ao servidor Node.js, que executa o mesmo binário C usado pela CLI.
 
-## Testes
-
-Execute toda a suíte com:
-
-```sh
-make test
-```
-
-Esse alvo executa os testes C do motor, os cenários da CLI e, quando o Node.js está
-disponível, os testes HTTP da API.
-
-Em Linux, também é possível recompilar os testes com AddressSanitizer e
-UndefinedBehaviorSanitizer:
-
-```sh
-make sanitize
-```
-
-O alvo de sanitizadores não é suportado pelo GCC padrão do MSYS2 UCRT64.
-
 ## Organização do repositório
 
 ```text
 include/      contrato público compartilhado pelos módulos C
 src/          CLI, leitura de entrada, motor e serialização
-tests/        testes unitários, de integração da CLI e da API
 web/          servidor Node.js e interface estática
 examples/     carga de processos e configuração de demonstração
 docs/         documentação técnica e guia de leitura do código

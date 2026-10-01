@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Leitura defensiva dos dois contratos textuais aceitos pela CLI. */
 static void set_error(char *error, size_t size, const char *format, ...) {
     va_list args;
     if (size == 0) return;
@@ -114,6 +115,7 @@ bool read_config(const char *path, SchedulerConfig *config, char *error, size_t 
         set_error(error, error_size, "não foi possível abrir a configuração '%s': %s", path, strerror(errno));
         return false;
     }
+    /* Chaves são únicas; linhas vazias e comentários não participam do contrato. */
     while ((line_status = read_line(file, &line, &capacity, error, error_size)) > 0) {
         char *content, *colon, *key, *value;
         int parsed;
@@ -178,6 +180,7 @@ bool read_processes(FILE *stream, ProcessSpec **processes, size_t *count,
     int line_status;
     unsigned line_number = 0;
 
+    /* O vetor cresce sob demanda e preserva a ordem, mesmo com chegadas desordenadas. */
     while ((line_status = read_line(stream, &line, &line_capacity, error, error_size)) > 0) {
         int arrival, burst, priority;
         char *content;

@@ -6,6 +6,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+/*
+ * Ponto de entrada da CLI. Este módulo valida argumentos e coordena leitura,
+ * simulação e saída; nenhuma regra de escalonamento é implementada aqui.
+ */
 typedef enum { FORMAT_TEXT, FORMAT_JSON } OutputFormat;
 
 static void usage(FILE *stream, const char *program) {
@@ -36,6 +40,7 @@ int main(int argc, char **argv) {
     char error[SCHEDULER_ERROR_SIZE] = {0};
     int argument;
 
+    /* Primeira fase: interpretar argumentos sem produzir saída de resultado. */
     for (argument = 1; argument < argc; argument++) {
         if (strcmp(argv[argument], "--help") == 0 || strcmp(argv[argument], "-h") == 0) {
             usage(stdout, argv[0]);
@@ -96,6 +101,7 @@ int main(int argc, char **argv) {
         free(processes);
         return 1;
     }
+    /* Cada simulate cria estado próprio, portanto os algoritmos não se contaminam. */
     for (index = 0; index < ALG_COUNT; index++) {
         Algorithm algorithm = (Algorithm)index;
         if (strcmp(algorithm_text, "all") != 0 && strcmp(algorithm_text, algorithm_key(algorithm)) != 0) continue;

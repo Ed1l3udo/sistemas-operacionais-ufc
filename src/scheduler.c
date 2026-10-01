@@ -5,9 +5,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Limites impedem que entradas válidas sintaticamente esgotem memória. */
 #define MAX_TIMELINE_SECONDS 10000000
 #define MAX_TRACE_CELLS 1000000
 
+/* Estado mutável privado; ProcessSpec permanece imutável durante a simulação. */
 typedef enum { STATE_NEW, STATE_READY, STATE_RUNNING, STATE_DONE } State;
 
 typedef struct {
@@ -20,6 +22,7 @@ typedef struct {
     State state;
 } Runtime;
 
+/* Fila circular usada exclusivamente pelo Round-Robin sem prioridade. */
 typedef struct {
     int *items;
     size_t capacity;
@@ -36,6 +39,7 @@ static void set_error(char *error, size_t size, const char *format, ...) {
 }
 
 static uint32_t next_random(uint32_t *state) {
+    /* xorshift32: pequeno, determinístico e suficiente para desempates. */
     uint32_t value = *state;
     if (value == 0) value = 0x6d2b79f5U;
     value ^= value << 13;
@@ -77,6 +81,7 @@ static bool prepare(const ProcessSpec *processes, size_t count, const SchedulerC
     size_t index;
     long long maximum = 0, bursts = 0;
 
+    /* Maior chegada + soma dos bursts é um limite superior seguro da timeline. */
     for (index = 0; index < count; index++) {
         if (processes[index].arrival > maximum) maximum = processes[index].arrival;
         bursts += processes[index].burst;
@@ -151,6 +156,7 @@ static bool record_decision(const ProcessSpec *processes, const Runtime *runtime
     DecisionSnapshot *snapshot;
     size_t index, candidate_count = 0, position = 0;
 
+    /* O trace fotografa a decisão antes de consumir o segundo correspondente. */
     if (!config->trace) return true;
     snapshot = &result->decisions[time];
     for (index = 0; index < count; index++) {
@@ -214,21 +220,25 @@ static int choose_selected(const ProcessSpec *processes, const Runtime *runtime,
     int candidates = 0;
     int selected = -1;
 
+    /* 1) menor valor do critério principal da política. */
     for (index = 0; index < count; index++) {
         int value;
         if (runtime[index].state != STATE_READY && runtime[index].state != STATE_RUNNING) continue;
         value = primary_value(processes, runtime, (int)index, algorithm);
         if (value < best_primary) best_primary = value;
     }
+    /* 2) preservar a CPU atual evita uma troca quando o critério empata. */
     if (current >= 0 && runtime[current].state != STATE_DONE &&
         primary_value(processes, runtime, current, algorithm) == best_primary) {
         return current;
     }
+    /* 3) entre os demais, preferir o menor tempo restante. */
     for (index = 0; index < count; index++) {
         if (runtime[index].state != STATE_READY) continue;
         if (primary_value(processes, runtime, (int)index, algorithm) != best_primary) continue;
         if (runtime[index].remaining < best_remaining) best_remaining = runtime[index].remaining;
     }
+    /* 4) empate final: amostragem por reservatório com semente reproduzível. */
     for (index = 0; index < count; index++) {
         if (runtime[index].state != STATE_READY || runtime[index].remaining != best_remaining) continue;
         if (primary_value(processes, runtime, (int)index, algorithm) != best_primary) continue;
@@ -264,6 +274,7 @@ static bool simulate_selected(const ProcessSpec *processes, size_t count, Runtim
     int time = 0, current = -1;
     uint32_t random_state = config->seed;
 
+    /* FCFS, SJF, SRTF e prioridades simples compartilham este relógio discreto. */
     while (completed < count) {
         int selected, cpu_before = current;
         DecisionReason reason;
@@ -345,6 +356,7 @@ static bool simulate_rr(const ProcessSpec *processes, size_t count, Runtime *run
         int returned = pending;
         int cpu_before = current >= 0 ? current : pending;
         DecisionReason reason;
+        /* Chegadas do limite da fatia entram antes do processo expirado. */
         admit_fifo(processes, runtime, count, time, &queue, &order);
         if (pending >= 0) {
             runtime[pending].state = STATE_READY;
@@ -431,6 +443,7 @@ static void age_waiting(const ProcessSpec *processes, Runtime *runtime, size_t c
         int periods, effective;
         if ((int)index == selected || runtime[index].state != STATE_READY) continue;
         runtime[index].ready_wait++;
+        /* A prioridade só melhora após um quantum completo de espera. */
         periods = runtime[index].ready_wait / config->quantum;
         effective = processes[index].priority - config->aging * periods;
         runtime[index].effective_priority = effective < 1 ? 1 : effective;
@@ -454,6 +467,7 @@ static bool simulate_priority_rr(const ProcessSpec *processes, size_t count, Run
             runtime[pending].ready_order = order++;
             pending = -1;
         }
+        /* Uma prioridade melhor só é considerada entre quanta, nunca no meio. */
         if (current < 0) {
             current = choose_priority_rr(runtime, count);
             quantum_used = 0;
@@ -507,6 +521,7 @@ static void calculate_metrics(const ProcessSpec *processes, size_t count,
         waiting += metric->waiting;
         response += metric->response;
     }
+    /* Ociosidade quebra a sequência e, por definição, não conta como troca. */
     for (index = 1; index < result->timeline_length; index++) {
         if (result->timeline[index - 1] >= 0 && result->timeline[index] >= 0 &&
             result->timeline[index - 1] != result->timeline[index]) switches++;
@@ -529,6 +544,7 @@ bool simulate(const ProcessSpec *processes, size_t count, const SchedulerConfig 
     memset(result, 0, sizeof(*result));
     result->algorithm = algorithm;
     if (!prepare(processes, count, config, &runtime, result, error, error_size)) return false;
+    /* RR exige fila; RR com prioridade exige aging; os demais usam seleção comum. */
     if (algorithm == ALG_RR) {
         ok = simulate_rr(processes, count, runtime, config, result, error, error_size);
     } else if (algorithm == ALG_PRIORITY_RR) {

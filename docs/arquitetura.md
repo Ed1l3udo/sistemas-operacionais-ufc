@@ -159,20 +159,35 @@ Os cartões preservados usam transições de posição, entradas e saídas receb
 movimentos curtos e as réguas interpolam os valores. Essa camada é estritamente
 visual: não altera nem infere o estado produzido pelo C e é desativada quando o
 sistema solicita movimento reduzido.
-O desenho, contrato e critérios de aceite estão em
-[`indicadores-decisoes-escalonador.md`](indicadores-decisoes-escalonador.md).
 
-## 8. Testes e limites
-
-Os testes C cobrem processo único, ociosidade, chegadas desordenadas e simultâneas,
-preempção, término anterior ao quantum, múltiplos quanta, envelhecimento, métricas e
-reprodutibilidade. O script da CLI cobre JSON/texto e entradas ou configurações
-inválidas. Os testes Node iniciam o servidor numa porta efêmera e confirmam que a
-resposta da API é igual ao JSON produzido diretamente pelo executável.
+## 8. Limites operacionais
 
 Para limitar uso acidental de memória, uma simulação aceita até 10.000 processos e
 uma timeline de até 10.000.000 de segundos. Na API, os limites adicionais de corpo,
 tempo e saída protegem o servidor local. O rastreamento limita o produto entre
 processos e duração máxima a 1.000.000 de estados; uma simulação normal não recebe
 esse limite adicional.
+
+## 9. Conformidade com o enunciado
+
+A implementação foi confrontada com `Tarefa 01 - Escalonamento de Processos.pdf`
+antes do fechamento da entrega.
+
+| Exigência do enunciado | Atendimento no projeto |
+| --- | --- |
+| Sete algoritmos de escalonamento | `Algorithm` enumera e `simulate` executa FCFS, SJF, SRTF, duas políticas de prioridade, RR e RR com prioridade/aging. |
+| Quantum e aging em arquivo texto | `read_config` exige `quantum:valor` e `aging:valor`, rejeitando ausência, duplicata e valores inválidos. |
+| Processos recebidos por `stdin` | `read_processes(stdin, ...)` lê três inteiros por linha. |
+| Entrada possivelmente fora de ordem | A admissão usa o instante de chegada; o ID continua seguindo a ordem original das linhas. |
+| Aging a cada quantum, sem preempção por prioridade | `age_waiting` promove somente após períodos completos de quantum e `simulate_priority_rr` só escolhe novamente no fim da fatia ou na conclusão. |
+| Desempate por CPU atual, menor restante e sorteio | `choose_selected` aplica essa sequência e usa `xorshift32` com semente reproduzível. Round-Robin preserva FIFO para não quebrar a rotação própria da política. |
+| Turnaround médio, espera média e trocas de contexto | `calculate_metrics` produz os três valores; a saída textual os apresenta para cada algoritmo. |
+| Diagrama vertical, uma linha por segundo | `print_text_result` imprime a ocupação da CPU e a espera dos processos em cada intervalo. |
+| Código comentado e estruturas documentadas | Os módulos C registram responsabilidades e invariantes; este documento e o guia de código descrevem os tipos e decisões. |
+| Interface visual opcional | A aplicação web local compara políticas, percorre a timeline e apresenta as decisões calculadas pelo C. |
+
+O projeto também entrega extensões que não substituem os itens obrigatórios:
+tempo de resposta, métricas individuais, JSON, trace de decisões, limites de
+recursos e interface web. A saída textual continua sendo o formato acadêmico
+padrão da CLI.
 

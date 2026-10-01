@@ -2,6 +2,8 @@
 
 #include <stdio.h>
 
+/* Serialização sem lógica de escalonamento: todo valor vem de SimulationResult. */
+
 static const char *decision_reason_key(DecisionReason reason) {
     static const char *keys[] = {"idle", "dispatch", "continue", "preempt", "quantum"};
     return reason >= DECISION_IDLE && reason <= DECISION_QUANTUM ? keys[reason] : "idle";
@@ -28,6 +30,7 @@ void print_text_result(FILE *stream, const ProcessSpec *processes, size_t count,
                 processes[index].priority, metric->first_dispatch, metric->completion,
                 metric->turnaround, metric->waiting, metric->response);
     }
+    /* Diagrama vertical pedido no enunciado: uma linha para cada segundo. */
     fprintf(stream, "\nTempo   ");
     for (index = 0; index < count; index++) fprintf(stream, "P%-5d", processes[index].id);
     fputc('\n', stream);
@@ -76,6 +79,7 @@ static void print_json_result(FILE *stream, const ProcessSpec *processes, size_t
         }
     }
     fputc(']', stream);
+    /* Decisions só existe quando --trace foi solicitado para uma única política. */
     if (result->decisions) {
         fputs(",\"decisions\":[", stream);
         for (index = 0; index < result->decision_length; index++) {
