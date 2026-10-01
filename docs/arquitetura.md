@@ -20,8 +20,8 @@ O cabeçalho `include/scheduler.h` é o contrato entre os módulos:
   simulação;
 - `SchedulerConfig`: quantum, taxa de envelhecimento e semente pseudoaleatória;
 - `ProcessMetrics`: primeiro despacho, conclusão, turnaround, espera e resposta;
-- `SimulationResult`: algoritmo, métricas individuais, timeline, médias e trocas de
-  contexto.
+- `SimulationResult`: algoritmo, métricas individuais, timeline, médias, trocas de
+  contexto e, quando solicitado, fotografias das decisões.
 
 `src/input.c` valida a configuração e as linhas de processos com detecção de
 overflow. `src/scheduler.c` mantém os estados internos `NEW`, `READY`, `RUNNING` e
@@ -129,6 +129,12 @@ de algoritmos. O servidor:
 6. interpreta o JSON, filtra os algoritmos solicitados e remove o temporário em um
    bloco `finally`.
 
+`POST /api/trace` aceita a mesma carga com exatamente um algoritmo e executa a CLI
+com `--trace`. A resposta acrescenta uma fotografia para cada segundo, contendo o
+estado imediatamente anterior à execução. A interface solicita esse conteúdo sob
+demanda quando o usuário seleciona uma política; a comparação inicial continua
+usando o JSON compacto de `/api/simulate`.
+
 Erros têm a forma `{"error":{"code":"...","message":"..."}}` e status HTTP
 compatível. O servidor também aplica CSP, `nosniff` e política de referrer aos
 arquivos estáticos.
@@ -143,18 +149,45 @@ entrada textual inválida exibe o erro, mas não modifica a tabela.
 Depois da simulação, a comparação permite escolher um algoritmo por mouse ou
 teclado. O detalhe mostra a timeline, métricas individuais e o estado atual. O
 playback possui reinício, passo anterior, reprodução/pausa, passo seguinte,
-scrubber e três velocidades. A única animação temporal da aplicação ocorre nesses
-controles.
+scrubber e três velocidades. O playback controla tanto a timeline quanto as
+transições visuais entre as fotografias de decisão.
 
-## 8. Testes e limites
+Os indicadores de decisão específicos de cada política ficam entre o playback e a
+timeline. Eles exibem fila de chegada, comparadores de tempo restante, níveis de
+prioridade, fila circular/quantum ou prioridade efetiva/aging conforme o algoritmo.
+Os cartões preservados usam transições de posição, entradas e saídas recebem
+movimentos curtos e as réguas interpolam os valores. Essa camada é estritamente
+visual: não altera nem infere o estado produzido pelo C e é desativada quando o
+sistema solicita movimento reduzido.
 
-Os testes C cobrem processo único, ociosidade, chegadas desordenadas e simultâneas,
-preempção, término anterior ao quantum, múltiplos quanta, envelhecimento, métricas e
-reprodutibilidade. O script da CLI cobre JSON/texto e entradas ou configurações
-inválidas. Os testes Node iniciam o servidor numa porta efêmera e confirmam que a
-resposta da API é igual ao JSON produzido diretamente pelo executável.
+## 8. Limites operacionais
 
 Para limitar uso acidental de memória, uma simulação aceita até 10.000 processos e
 uma timeline de até 10.000.000 de segundos. Na API, os limites adicionais de corpo,
-tempo e saída protegem o servidor local.
+tempo e saída protegem o servidor local. O rastreamento limita o produto entre
+processos e duração máxima a 1.000.000 de estados; uma simulação normal não recebe
+esse limite adicional.
+
+## 9. Conformidade com o enunciado
+
+A implementação foi confrontada com `Tarefa 01 - Escalonamento de Processos.pdf`
+antes do fechamento da entrega.
+
+| Exigência do enunciado | Atendimento no projeto |
+| --- | --- |
+| Sete algoritmos de escalonamento | `Algorithm` enumera e `simulate` executa FCFS, SJF, SRTF, duas políticas de prioridade, RR e RR com prioridade/aging. |
+| Quantum e aging em arquivo texto | `read_config` exige `quantum:valor` e `aging:valor`, rejeitando ausência, duplicata e valores inválidos. |
+| Processos recebidos por `stdin` | `read_processes(stdin, ...)` lê três inteiros por linha. |
+| Entrada possivelmente fora de ordem | A admissão usa o instante de chegada; o ID continua seguindo a ordem original das linhas. |
+| Aging a cada quantum, sem preempção por prioridade | `age_waiting` promove somente após períodos completos de quantum e `simulate_priority_rr` só escolhe novamente no fim da fatia ou na conclusão. |
+| Desempate por CPU atual, menor restante e sorteio | `choose_selected` aplica essa sequência e usa `xorshift32` com semente reproduzível. Round-Robin preserva FIFO para não quebrar a rotação própria da política. |
+| Turnaround médio, espera média e trocas de contexto | `calculate_metrics` produz os três valores; a saída textual os apresenta para cada algoritmo. |
+| Diagrama vertical, uma linha por segundo | `print_text_result` imprime a ocupação da CPU e a espera dos processos em cada intervalo. |
+| Código comentado e estruturas documentadas | Os módulos C registram responsabilidades e invariantes; este documento e o guia de código descrevem os tipos e decisões. |
+| Interface visual opcional | A aplicação web local compara políticas, percorre a timeline e apresenta as decisões calculadas pelo C. |
+
+O projeto também entrega extensões que não substituem os itens obrigatórios:
+tempo de resposta, métricas individuais, JSON, trace de decisões, limites de
+recursos e interface web. A saída textual continua sendo o formato acadêmico
+padrão da CLI.
 

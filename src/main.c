@@ -6,11 +6,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+/*
+ * Ponto de entrada da CLI. Este módulo valida argumentos e coordena leitura,
+ * simulação e saída; nenhuma regra de escalonamento é implementada aqui.
+ */
 typedef enum { FORMAT_TEXT, FORMAT_JSON } OutputFormat;
 
 static void usage(FILE *stream, const char *program) {
     fprintf(stream,
-            "Uso: %s --config ARQUIVO [--algorithm NOME|all] [--format text|json] [--seed N]\n"
+            "Uso: %s --config ARQUIVO [--algorithm NOME|all] [--format text|json] [--seed N] [--trace]\n"
             "Algoritmos: fcfs, sjf, srtf, priority-np, priority-p, rr, priority-rr, all\n",
             program);
 }
@@ -28,7 +32,7 @@ static bool parse_seed(const char *text, uint32_t *seed) {
 int main(int argc, char **argv) {
     const char *config_path = NULL;
     const char *algorithm_text = "all";
-    SchedulerConfig config = {.quantum = 0, .aging = 0, .seed = 42};
+    SchedulerConfig config = {.quantum = 0, .aging = 0, .seed = 42, .trace = false};
     OutputFormat format = FORMAT_TEXT;
     ProcessSpec *processes = NULL;
     SimulationResult results[ALG_COUNT] = {0};
@@ -36,10 +40,15 @@ int main(int argc, char **argv) {
     char error[SCHEDULER_ERROR_SIZE] = {0};
     int argument;
 
+    /* Primeira fase: interpretar argumentos sem produzir saída de resultado. */
     for (argument = 1; argument < argc; argument++) {
         if (strcmp(argv[argument], "--help") == 0 || strcmp(argv[argument], "-h") == 0) {
             usage(stdout, argv[0]);
             return 0;
+        }
+        if (strcmp(argv[argument], "--trace") == 0) {
+            config.trace = true;
+            continue;
         }
         if (argument + 1 >= argc) {
             fprintf(stderr, "erro: falta valor para '%s'\n", argv[argument]);
@@ -82,12 +91,17 @@ int main(int argc, char **argv) {
             return 2;
         }
     }
+    if (config.trace && (strcmp(algorithm_text, "all") == 0 || format != FORMAT_JSON)) {
+        fputs("erro: --trace exige um único algoritmo e --format json\n", stderr);
+        return 2;
+    }
     if (!read_config(config_path, &config, error, sizeof(error)) ||
         !read_processes(stdin, &processes, &process_count, error, sizeof(error))) {
         fprintf(stderr, "erro: %s\n", error);
         free(processes);
         return 1;
     }
+    /* Cada simulate cria estado próprio, portanto os algoritmos não se contaminam. */
     for (index = 0; index < ALG_COUNT; index++) {
         Algorithm algorithm = (Algorithm)index;
         if (strcmp(algorithm_text, "all") != 0 && strcmp(algorithm_text, algorithm_key(algorithm)) != 0) continue;

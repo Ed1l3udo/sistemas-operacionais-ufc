@@ -11,6 +11,11 @@ const state = {
   selectedAlgorithm: null,
   second: 0,
   timer: null,
+  request: null,
+  traces: new Map(),
+  traceRequest: 0,
+  lastDecisionView: null,
+  decisionMotionRevision: 0,
 };
 
 const elements = {
@@ -35,6 +40,10 @@ const elements = {
   next: document.querySelector('#next'),
   speed: document.querySelector('#speed'),
   scrubber: document.querySelector('#scrubber'),
+  decisionTitle: document.querySelector('#decision-title'),
+  decisionArrivals: document.querySelector('#decision-arrivals'),
+  decisionVisual: document.querySelector('#decision-visual'),
+  decisionExplanation: document.querySelector('#decision-explanation'),
 };
 
 function processText(processes) {
@@ -179,6 +188,10 @@ elements.form.addEventListener('submit', async (event) => {
     if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível concluir a simulação.');
     state.processes = processes;
     state.data = body;
+    state.request = payload;
+    state.traces = new Map();
+    state.traceRequest += 1;
+    state.lastDecisionView = null;
     state.selectedAlgorithm = body.results[0]?.algorithm ?? null;
     state.second = 0;
     renderResults();
@@ -214,6 +227,7 @@ function selectComparisonRow(row) {
   stopPlayback();
   state.selectedAlgorithm = row.dataset.algorithm;
   state.second = 0;
+  state.lastDecisionView = null;
   for (const candidate of elements.comparison.querySelectorAll('tr')) {
     const selected = candidate === row;
     candidate.classList.toggle('selected', selected);
@@ -232,6 +246,430 @@ elements.comparison.addEventListener('keydown', (event) => {
 
 function selectedResult() {
   return state.data?.results.find((result) => result.algorithm === state.selectedAlgorithm);
+}
+
+function setDecisionLoading(message = 'Consultando o motor C…') {
+  state.lastDecisionView = null;
+  state.decisionMotionRevision += 1;
+  elements.decisionTitle.textContent = 'Como a CPU foi escolhida';
+  elements.decisionArrivals.textContent = '—';
+  elements.decisionVisual.innerHTML = '<div class="decision-loading" aria-hidden="true"><span></span><span></span><span></span></div>';
+  elements.decisionExplanation.textContent = message;
+}
+
+async function loadDecisionTrace(result) {
+  const cached = state.traces.get(result.algorithm);
+  if (cached) {
+    renderDecision();
+    return;
+  }
+  const requestId = ++state.traceRequest;
+  setDecisionLoading();
+  try {
+    const response = await fetch('/api/trace', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...state.request, algorithms: [result.algorithm] }),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(body?.error?.message || 'Não foi possível carregar as decisões.');
+    const traced = body.results[0];
+    state.traces.set(result.algorithm, traced.decisions);
+    if (requestId === state.traceRequest && state.selectedAlgorithm === result.algorithm) renderDecision();
+  } catch (error) {
+    if (requestId !== state.traceRequest || state.selectedAlgorithm !== result.algorithm) return;
+    elements.decisionVisual.innerHTML = '<div class="decision-empty">Rastreamento indisponível</div>';
+    elements.decisionExplanation.textContent = error.message;
+  }
+}
+
+function processSpec(id) {
+  return state.data.processes.find((process) => process.id === id);
+}
+
+function selectedCandidate(decision) {
+  return decision.ready.find((candidate) => candidate.id === decision.selected);
+}
+
+function arrivalsAt(time) {
+  return state.data.processes.filter((process) => process.arrival === time).map((process) => process.id);
+}
+
+function processCard(candidate, { selected = false, detail = '' } = {}) {
+  if (!candidate) return '<div class="process-card empty"><strong>CPU ociosa</strong><span>sem processo pronto</span></div>';
+  return `<div class="process-card ${selected ? 'selected' : ''}" data-motion-key="process-${candidate.id}">
+    <strong>${candidate.id}</strong>
+    <span>${detail}</span>
+  </div>`;
+}
+
+function compactCandidates(candidates, limit = 12) {
+  return { shown: candidates.slice(0, limit), hidden: Math.max(0, candidates.length - limit) };
+}
+
+function overflowLabel(hidden) {
+  return hidden ? `<span class="candidate-overflow">+${hidden} processo(s)</span>` : '';
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function captureDecisionMotion() {
+  elements.decisionVisual.querySelector('.decision-motion-overlay')?.remove();
+  const visualRect = elements.decisionVisual.getBoundingClientRect();
+  const items = new Map([...elements.decisionVisual.querySelectorAll('[data-motion-key]')].map((element) => {
+    const rect = element.getBoundingClientRect();
+    return [element.dataset.motionKey, {
+      clone: element.cloneNode(true),
+      score: Number(element.dataset.motionScore),
+      rect: {
+        left: rect.left - visualRect.left,
+        top: rect.top - visualRect.top,
+        width: rect.width,
+        height: rect.height,
+      },
+    }];
+  }));
+  const progress = new Map([...elements.decisionVisual.querySelectorAll('[data-motion-progress]')]
+    .map((element) => [element.dataset.motionProgress, Number(element.dataset.motionValue)]));
+  return {
+    algorithm: elements.decisionVisual.dataset.algorithm,
+    time: Number(elements.decisionVisual.dataset.time),
+    selected: elements.decisionVisual.dataset.selected || null,
+    items,
+    progress,
+  };
+}
+
+function playDecisionAnimation(element, keyframes, options = {}) {
+  const { onFinish, ...timing } = options;
+  const animation = element.animate(keyframes, {
+    duration: 380,
+    easing: 'cubic-bezier(.22, 1, .36, 1)',
+    fill: 'both',
+    ...timing,
+  });
+  animation.finished.then(
+    () => {
+      if (onFinish) onFinish();
+      else animation.cancel();
+    },
+    () => onFinish?.(),
+  ).catch(() => {});
+}
+
+function decisionEntrance(algorithm, direction) {
+  if (algorithm === 'fcfs') return `translateX(${direction * 32}px) scale(.97)`;
+  if (algorithm === 'rr') return `translate(${direction * 24}px, 7px) scale(.96)`;
+  if (algorithm.startsWith('priority')) return 'translateY(12px) scale(.98)';
+  return `translateY(${direction * 10}px) scale(.98)`;
+}
+
+function decisionExit(algorithm, direction) {
+  if (algorithm === 'fcfs') return `translateX(${-direction * 30}px) scale(.94)`;
+  if (algorithm === 'rr') return `translate(${-direction * 22}px, -9px) rotate(-3deg) scale(.94)`;
+  return `translateY(${-direction * 10}px) scale(.94)`;
+}
+
+function animatePolicyDecision(previous, algorithm, decision) {
+  const selectionChanged = previous?.selected !== decision.selected;
+  const selectedKey = decision.selected ? `process-${decision.selected}` : null;
+  const selected = (selectedKey && elements.decisionVisual.querySelector(`[data-motion-key="${selectedKey}"]`))
+    || elements.decisionVisual.querySelector('.winner');
+
+  if (selectionChanged && selected) {
+    playDecisionAnimation(selected, [
+      { filter: 'brightness(1)' },
+      { filter: 'brightness(1.16)', offset: .45 },
+      { filter: 'brightness(1)' },
+    ], { duration: 430 });
+  }
+
+  if (decision.reason === 'preempt') {
+    const dispute = elements.decisionVisual.querySelector('.has-preemption');
+    if (dispute) {
+      playDecisionAnimation(dispute, [
+        { boxShadow: '0 0 0 0 rgba(255, 118, 95, 0)' },
+        { boxShadow: '0 0 0 5px rgba(255, 118, 95, .18)', offset: .4 },
+        { boxShadow: '0 0 0 0 rgba(255, 118, 95, 0)' },
+      ], { duration: 520 });
+    }
+  }
+
+  if (algorithm === 'fcfs' && selectionChanged) {
+    const arrow = elements.decisionVisual.querySelector('.flow-arrow');
+    if (arrow) {
+      playDecisionAnimation(arrow, [
+        { translate: '8px 0', opacity: .45 },
+        { translate: '0 0', opacity: 1 },
+      ], { duration: 360 });
+    }
+  }
+
+  if (algorithm === 'rr' && decision.reason === 'quantum') {
+    const arrow = elements.decisionVisual.querySelector('.circular-arrow');
+    if (arrow) {
+      playDecisionAnimation(arrow, [
+        { transform: 'rotate(0)' },
+        { transform: 'rotate(360deg)' },
+      ], { duration: 520 });
+    }
+  }
+
+  if (algorithm === 'priority-rr' && previous?.algorithm === algorithm) {
+    elements.decisionVisual.querySelectorAll('.aging-card[data-motion-score]').forEach((card) => {
+      const prior = previous.items.get(card.dataset.motionKey)?.score;
+      const current = Number(card.dataset.motionScore);
+      if (!Number.isFinite(prior) || prior === current) return;
+      playDecisionAnimation(card, [
+        { filter: 'brightness(1)', boxShadow: '0 0 0 rgba(185, 238, 88, 0)' },
+        { filter: 'brightness(1.13)', boxShadow: '0 7px 18px rgba(185, 238, 88, .16)', offset: .45 },
+        { filter: 'brightness(1)', boxShadow: '0 0 0 rgba(185, 238, 88, 0)' },
+      ], { duration: 500 });
+    });
+  }
+}
+
+function animateDecisionMotion(previous, algorithm, decision, revision) {
+  if (revision !== state.decisionMotionRevision || prefersReducedMotion()) return;
+  const samePolicy = previous?.algorithm === algorithm;
+  const direction = !previous || decision.time >= previous.time ? 1 : -1;
+  const currentItems = new Map([...elements.decisionVisual.querySelectorAll('[data-motion-key]')]
+    .map((element) => [element.dataset.motionKey, element]));
+
+  [...currentItems.entries()].forEach(([key, element], index) => {
+    const prior = samePolicy ? previous.items.get(key) : null;
+    if (prior) {
+      const rect = element.getBoundingClientRect();
+      const visualRect = elements.decisionVisual.getBoundingClientRect();
+      const left = rect.left - visualRect.left;
+      const top = rect.top - visualRect.top;
+      const deltaX = prior.rect.left - left;
+      const deltaY = prior.rect.top - top;
+      if (Math.abs(deltaX) > 0.5 || Math.abs(deltaY) > 0.5) {
+        playDecisionAnimation(element, [
+          { transform: `translate(${deltaX}px, ${deltaY}px)` },
+          { transform: 'translate(0, 0)' },
+        ]);
+      }
+      return;
+    }
+    playDecisionAnimation(element, [
+      { opacity: 0, transform: decisionEntrance(algorithm, direction) },
+      { opacity: 1, transform: 'translate(0, 0) scale(1)' },
+    ], { delay: Math.min(index, 6) * 34 });
+  });
+
+  if (samePolicy) {
+    const outgoing = [...previous.items.entries()].filter(([key]) => !currentItems.has(key));
+    if (outgoing.length) {
+      const overlay = document.createElement('div');
+      overlay.className = 'decision-motion-overlay';
+      overlay.setAttribute('aria-hidden', 'true');
+      outgoing.forEach(([, item], index) => {
+        const ghost = item.clone;
+        ghost.removeAttribute('data-motion-key');
+        ghost.classList.add('decision-motion-ghost');
+        Object.assign(ghost.style, {
+          position: 'absolute',
+          left: `${item.rect.left}px`,
+          top: `${item.rect.top}px`,
+          width: `${item.rect.width}px`,
+          height: `${item.rect.height}px`,
+          margin: '0',
+          opacity: '0',
+        });
+        overlay.append(ghost);
+        playDecisionAnimation(ghost, [
+          { opacity: 1, transform: 'translateX(0) scale(1)' },
+          { opacity: 0, transform: decisionExit(algorithm, direction) },
+        ], {
+          duration: 260,
+          delay: index * 18,
+          onFinish: () => {
+            ghost.remove();
+            if (!overlay.childElementCount) overlay.remove();
+          },
+        });
+      });
+      elements.decisionVisual.append(overlay);
+      window.setTimeout(() => overlay.remove(), 360 + outgoing.length * 18);
+    }
+  }
+
+  elements.decisionVisual.querySelectorAll('[data-motion-progress]').forEach((element) => {
+    const key = element.dataset.motionProgress;
+    const current = Number(element.dataset.motionValue);
+    const prior = samePolicy ? previous.progress.get(key) : 0;
+    if (!Number.isFinite(current) || current === prior) return;
+    playDecisionAnimation(element, [
+      { width: `${Number.isFinite(prior) ? prior : 0}%` },
+      { width: `${current}%` },
+    ], { duration: 440 });
+  });
+
+  animatePolicyDecision(previous, algorithm, decision);
+}
+
+function applyDecisionDynamicStyles() {
+  elements.decisionVisual.querySelectorAll('[data-motion-progress]').forEach((element) => {
+    element.style.width = `${Number(element.dataset.motionValue)}%`;
+  });
+  elements.decisionVisual.querySelectorAll('[data-priority-level]').forEach((element) => {
+    element.style.setProperty('--priority-level', element.dataset.priorityLevel);
+  });
+}
+
+function renderFcfs(decision) {
+  const ordered = [...decision.ready].sort((left, right) => {
+    const arrival = processSpec(left.id).arrival - processSpec(right.id).arrival;
+    return arrival || left.remaining - right.remaining || left.readyOrder - right.readyOrder;
+  });
+  const waiting = compactCandidates(ordered.filter((candidate) => candidate.id !== decision.selected));
+  return `<div class="policy-stage fcfs-stage">
+    <div class="cpu-station"><span>CPU</span>${processCard(selectedCandidate(decision), {
+      selected: true, detail: `${selectedCandidate(decision)?.remaining ?? 0} s antes da execução`,
+    })}</div>
+    <div class="flow-arrow" aria-hidden="true">←</div>
+    <div class="queue-lane"><span class="lane-label">Fila por chegada</span><div class="card-row">
+      ${waiting.shown.map((candidate) => processCard(candidate, { detail: `chegou em t=${processSpec(candidate.id).arrival}` })).join('')}
+      ${waiting.shown.length ? '' : '<span class="empty-lane">ninguém aguardando</span>'}
+      ${overflowLabel(waiting.hidden)}
+    </div></div>
+  </div>`;
+}
+
+function remainingBars(decision, preemptive) {
+  const ordered = [...decision.ready].sort((left, right) => left.remaining - right.remaining);
+  const maximum = Math.max(1, ...ordered.map((candidate) => candidate.remaining));
+  const visible = compactCandidates(ordered);
+  return `<div class="remaining-comparison ${preemptive && decision.reason === 'preempt' ? 'has-preemption' : ''}">
+    <div class="comparison-caption"><span>${preemptive ? 'Reavaliado a cada segundo' : 'Escolhido quando a CPU fica livre'}</span><strong>menor vence</strong></div>
+    ${visible.shown.map((candidate) => {
+      const percentage = Math.max(8, candidate.remaining / maximum * 100);
+      return `<div class="remaining-row ${candidate.id === decision.selected ? 'winner' : ''}" data-motion-key="remaining-${candidate.id}">
+      <strong>${candidate.id}</strong><div class="remaining-track"><span data-motion-progress="remaining-${candidate.id}" data-motion-value="${percentage}"></span></div><b>${candidate.remaining} s</b>
+    </div>`;
+    }).join('')}
+    ${overflowLabel(visible.hidden)}
+  </div>`;
+}
+
+function priorityLadder(decision, preemptive) {
+  const ordered = [...decision.ready].sort((left, right) => left.priority - right.priority || left.remaining - right.remaining);
+  const visible = compactCandidates(ordered);
+  return `<div class="priority-ladder ${preemptive && decision.reason === 'preempt' ? 'has-preemption' : ''}">
+    <div class="ladder-scale"><span>prioridade mais alta</span><span>menor número</span></div>
+    ${visible.shown.map((candidate) => `<div class="priority-step ${candidate.id === decision.selected ? 'winner' : ''}" data-motion-key="priority-${candidate.id}" data-priority-level="${candidate.priority}">
+      <strong>${candidate.id}</strong><span>prioridade ${candidate.priority}</span><small>${candidate.remaining} s restantes</small>
+    </div>`).join('')}
+    ${overflowLabel(visible.hidden)}
+  </div>`;
+}
+
+function quantumMeter(decision) {
+  const used = decision.selected ? Math.min(decision.quantumLimit, decision.quantumUsed + 1) : 0;
+  const percentage = decision.quantumLimit ? used / decision.quantumLimit * 100 : 0;
+  return `<div class="quantum-meter"><div><span>Fatia atual</span><strong>${used}/${decision.quantumLimit} s</strong></div>
+    <div class="quantum-track"><span data-motion-progress="quantum" data-motion-value="${percentage}"></span></div>
+  </div>`;
+}
+
+function renderRoundRobin(decision) {
+  const queue = compactCandidates([...decision.ready]
+    .filter((candidate) => candidate.id !== decision.selected)
+    .sort((left, right) => left.readyOrder - right.readyOrder));
+  return `<div class="policy-stage rr-stage">
+    <div class="cpu-station"><span>CPU</span>${processCard(selectedCandidate(decision), {
+      selected: true, detail: `${selectedCandidate(decision)?.remaining ?? 0} s restantes`,
+    })}${quantumMeter(decision)}</div>
+    <div class="circular-arrow" aria-hidden="true">↻</div>
+    <div class="queue-lane"><span class="lane-label">Fila circular FIFO</span><div class="card-row numbered">
+      ${queue.shown.map((candidate, index) => `<div class="queue-position"><i>${index + 1}</i>${processCard(candidate, { detail: `${candidate.remaining} s restantes` })}</div>`).join('')}
+      ${queue.shown.length ? '' : '<span class="empty-lane">fila vazia</span>'}
+      ${overflowLabel(queue.hidden)}
+    </div></div>
+  </div>`;
+}
+
+function renderPriorityRoundRobin(decision) {
+  const ordered = [...decision.ready].sort((left, right) => (
+    left.effectivePriority - right.effectivePriority || left.readyOrder - right.readyOrder
+  ));
+  const visible = compactCandidates(ordered);
+  return `<div class="priority-aging-stage">
+    <div class="aging-summary">${quantumMeter(decision)}<span>Sem preempção durante a fatia</span></div>
+    <div class="aging-grid">${visible.shown.map((candidate) => {
+      const progress = decision.quantumLimit ? candidate.readyWait % decision.quantumLimit / decision.quantumLimit * 100 : 0;
+      return `<div class="aging-card ${candidate.id === decision.selected ? 'winner' : ''}" data-motion-key="aging-${candidate.id}" data-motion-score="${candidate.effectivePriority}">
+        <div><strong>${candidate.id}</strong><span>${candidate.priority} → <b>${candidate.effectivePriority}</b></span></div>
+        <small>${candidate.readyWait} s de espera · ordem ${candidate.readyOrder + 1}</small>
+        <div class="aging-track"><span data-motion-progress="aging-${candidate.id}" data-motion-value="${progress}"></span></div>
+      </div>`;
+    }).join('')}</div>${overflowLabel(visible.hidden)}
+  </div>`;
+}
+
+function decisionExplanation(result, decision) {
+  if (!decision.selected) return 'Nenhum processo está pronto; a CPU permanece ociosa neste segundo.';
+  const chosen = selectedCandidate(decision);
+  if (decision.reason === 'preempt') {
+    const criterion = result.algorithm === 'srtf'
+      ? `${chosen.remaining} s restantes`
+      : `prioridade ${chosen.priority}`;
+    return `${decision.selected} assume a CPU no lugar de ${decision.cpuBefore}: ${criterion} é o melhor valor disponível.`;
+  }
+  if (decision.reason === 'quantum') {
+    return `${decision.returned} consumiu seu quantum e voltou à fila; ${decision.selected} é o próximo processo elegível.`;
+  }
+  if (decision.reason === 'continue') {
+    const suffix = ['sjf', 'priority-np'].includes(result.algorithm)
+      ? ' A política não interrompe o trabalho em andamento.'
+      : '';
+    return `${decision.selected} continua na CPU.${suffix}`;
+  }
+  const choices = {
+    criterion: 'venceu pelo critério principal', remaining: 'venceu pelo menor tempo restante',
+    random: 'venceu o desempate pseudoaleatório reproduzível', fifo: 'estava na frente da fila FIFO',
+  };
+  return `${decision.selected} recebeu a CPU porque ${choices[decision.choice] || 'era o único processo pronto'}.`;
+}
+
+function renderDecision() {
+  const result = selectedResult();
+  const decisions = result ? state.traces.get(result.algorithm) : null;
+  const decision = decisions?.[state.second];
+  if (!result || !decision) return;
+  const arrivals = arrivalsAt(decision.time);
+  elements.decisionArrivals.textContent = arrivals.length ? arrivals.join(', ') : 'nenhuma';
+  const titles = {
+    fcfs: 'Fila de chegadas', sjf: 'Comparador de trabalhos curtos', srtf: 'Disputa de tempo restante',
+    'priority-np': 'Escada de prioridades', 'priority-p': 'Disputa de prioridades',
+    rr: 'Fila circular e relógio do quantum', 'priority-rr': 'Prioridade efetiva e envelhecimento',
+  };
+  elements.decisionTitle.textContent = titles[result.algorithm];
+  let content;
+  if (result.algorithm === 'fcfs') content = renderFcfs(decision);
+  else if (result.algorithm === 'sjf') content = remainingBars(decision, false);
+  else if (result.algorithm === 'srtf') content = remainingBars(decision, true);
+  else if (result.algorithm === 'priority-np') content = priorityLadder(decision, false);
+  else if (result.algorithm === 'priority-p') content = priorityLadder(decision, true);
+  else if (result.algorithm === 'rr') content = renderRoundRobin(decision);
+  else content = renderPriorityRoundRobin(decision);
+
+  const sameView = state.lastDecisionView?.algorithm === result.algorithm
+    && state.lastDecisionView.time === decision.time;
+  const previous = sameView ? null : captureDecisionMotion();
+  elements.decisionVisual.innerHTML = content;
+  applyDecisionDynamicStyles();
+  elements.decisionVisual.dataset.algorithm = result.algorithm;
+  elements.decisionVisual.dataset.time = String(decision.time);
+  elements.decisionVisual.dataset.selected = decision.selected || '';
+  state.lastDecisionView = { algorithm: result.algorithm, time: decision.time };
+  const revision = ++state.decisionMotionRevision;
+  if (!sameView) requestAnimationFrame(() => animateDecisionMotion(previous, result.algorithm, decision, revision));
+  elements.decisionExplanation.textContent = decisionExplanation(result, decision);
 }
 
 function renderDetail() {
@@ -254,7 +692,9 @@ function renderDetail() {
   `).join('');
   elements.scrubber.max = String(Math.max(0, result.timeline.length - 1));
   elements.scrubber.value = '0';
+  setDecisionLoading();
   updatePlayback(false);
+  loadDecisionTrace(result);
 }
 
 function updatePlayback(scroll = true) {
@@ -265,6 +705,7 @@ function updatePlayback(scroll = true) {
   elements.currentTime.textContent = `t = ${entry.time} s`;
   elements.currentProcess.textContent = entry.process ? `${entry.process} em execução` : 'CPU ociosa';
   elements.scrubber.value = String(state.second);
+  if (state.traces.has(result.algorithm)) renderDecision();
   for (const cell of elements.timeline.querySelectorAll('[data-time]')) {
     cell.classList.toggle('current', Number(cell.dataset.time) === state.second);
   }
@@ -309,10 +750,49 @@ function startPlayback() {
   updatePlayback();
 }
 
-elements.play.addEventListener('click', () => (state.timer ? stopPlayback() : startPlayback()));
-elements.reset.addEventListener('click', () => { stopPlayback(); state.second = 0; updatePlayback(); });
-elements.previous.addEventListener('click', () => { stopPlayback(); state.second -= 1; updatePlayback(); });
-elements.next.addEventListener('click', () => { stopPlayback(); state.second += 1; updatePlayback(); });
+function togglePlayback() {
+  if (state.timer) stopPlayback();
+  else startPlayback();
+}
+
+function resetPlayback() {
+  stopPlayback();
+  state.second = 0;
+  updatePlayback();
+}
+
+function stepPlayback(offset) {
+  stopPlayback();
+  state.second += offset;
+  updatePlayback();
+}
+
+function isInteractiveTarget(target) {
+  return target instanceof Element && Boolean(target.closest('input, textarea, select, button, a, [contenteditable="true"]'));
+}
+
+document.addEventListener('keydown', (event) => {
+  if (!selectedResult() || isInteractiveTarget(event.target) || event.altKey || event.ctrlKey || event.metaKey) return;
+  if (event.code === 'Space') {
+    event.preventDefault();
+    if (event.repeat) return;
+    togglePlayback();
+  } else if (event.key === 'ArrowLeft') {
+    event.preventDefault();
+    stepPlayback(-1);
+  } else if (event.key === 'ArrowRight') {
+    event.preventDefault();
+    stepPlayback(1);
+  } else if (event.key === 'Home') {
+    event.preventDefault();
+    resetPlayback();
+  }
+});
+
+elements.play.addEventListener('click', togglePlayback);
+elements.reset.addEventListener('click', resetPlayback);
+elements.previous.addEventListener('click', () => stepPlayback(-1));
+elements.next.addEventListener('click', () => stepPlayback(1));
 elements.scrubber.addEventListener('input', () => { stopPlayback(); state.second = Number(elements.scrubber.value); updatePlayback(); });
 elements.speed.addEventListener('change', () => { if (state.timer) startPlayback(); });
 

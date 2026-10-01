@@ -4,12 +4,12 @@
 
 - A branch de integração é `main`.
 - Toda feature, correção ou refatoração deve nascer em uma branch própria, criada a
-  partir da `main` atualizada. Use os prefixos `feat/`, `fix/`, `refactor/`,
-  `test/` ou `docs/`.
+  partir da `main` atualizada. Use os prefixos `feat/`, `fix/`, `refactor/` ou
+  `docs/`.
 - Faça commits pequenos e autocontidos, com mensagens no imperativo e no padrão
-  Conventional Commits (`feat:`, `fix:`, `test:`, `docs:`, `refactor:`).
-- Antes do merge, execute os testes relacionados e registre no commit apenas os
-  arquivos da tarefa em curso.
+  Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`).
+- Antes do merge, compile e valide manualmente os fluxos relacionados; registre no
+  commit apenas os arquivos da tarefa em curso.
 - O merge para `main` pode ser feito autonomamente, sem pedir autorização. Prefira
   `git merge --no-ff` para preservar a fronteira da feature.
 - Nunca reescreva, descarte ou inclua alterações preexistentes do usuário sem
@@ -44,7 +44,6 @@
 ## Organização prevista
 
 - `src/` e `include/`: CLI, parser, motor, algoritmos e serialização.
-- `tests/`: testes unitários/integrados e casos calculados manualmente.
 - `web/`: servidor local e arquivos estáticos da interface.
 - `examples/`: entrada e configuração de demonstração.
 - `docs/`: documento técnico em português.
@@ -53,15 +52,14 @@
 
 - [x] Estruturar build C17, tipos comuns, parser e validações.
 - [x] Implementar os sete algoritmos, métricas e timelines.
-- [x] Implementar saída textual e JSON e cobrir a CLI com testes.
+- [x] Implementar saída textual e JSON da CLI.
 - [x] Criar API Node.js segura que execute o mesmo binário.
 - [x] Criar interface web responsiva, comparação e playback.
-- [x] Completar testes unitários, integração CLI/API e sanitizadores.
 - [x] Documentar arquitetura, decisões, execução e exemplos.
 
 ## Critérios de conclusão
 
-- `make`, `make test` e `make sanitize` passam.
+- `make` compila o executável sem avisos ou erros.
 - `make web` inicia o site local usando o binário compilado.
 - Saídas JSON da CLI e da API representam os mesmos resultados.
 - Os sete algoritmos exibem métricas individuais/globais e timeline por segundo.

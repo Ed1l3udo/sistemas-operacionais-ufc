@@ -38,7 +38,7 @@
 
         <div class="input-grid">
           <div class="editor-panel">
-            <div class="table-wrap">
+            <div class="table-wrap process-table-wrap" tabindex="0" aria-label="Tabela de processos com rolagem vertical">
               <table class="process-editor">
                 <caption class="sr-only">Processos a simular</caption>
                 <thead>
@@ -133,10 +133,10 @@
         </header>
 
         <div class="playback" aria-label="Controles de reprodução">
-          <button type="button" id="reset" title="Reiniciar" aria-label="Reiniciar">↺</button>
-          <button type="button" id="previous" title="Segundo anterior" aria-label="Segundo anterior">←</button>
-          <button type="button" id="play" class="play" aria-label="Reproduzir">▶</button>
-          <button type="button" id="next" title="Próximo segundo" aria-label="Próximo segundo">→</button>
+          <button type="button" id="reset" title="Reiniciar (Home)" aria-label="Reiniciar" aria-keyshortcuts="Home">↺</button>
+          <button type="button" id="previous" title="Segundo anterior (seta para a esquerda)" aria-label="Segundo anterior" aria-keyshortcuts="ArrowLeft">←</button>
+          <button type="button" id="play" class="play" title="Reproduzir ou pausar (Espaço)" aria-label="Reproduzir" aria-keyshortcuts="Space">▶</button>
+          <button type="button" id="next" title="Próximo segundo (seta para a direita)" aria-label="Próximo segundo" aria-keyshortcuts="ArrowRight">→</button>
           <label>Velocidade
             <select id="speed">
               <option value="1000">1×</option>
@@ -147,7 +147,26 @@
           <label class="scrubber"><span class="sr-only">Instante atual</span>
             <input id="scrubber" type="range" min="0" max="0" value="0">
           </label>
+          <p class="playback-shortcuts" aria-label="Atalhos de teclado">
+            <kbd>Espaço</kbd> reproduz/pausa <span aria-hidden="true">·</span>
+            <kbd>←</kbd><kbd>→</kbd> navegam
+          </p>
         </div>
+
+        <section class="decision-panel" aria-labelledby="decision-title">
+          <header class="decision-heading">
+            <div>
+              <p class="eyebrow">Decisão do escalonador</p>
+              <h4 id="decision-title">Carregando critério…</h4>
+            </div>
+            <div class="decision-arrivals" aria-label="Chegadas neste instante">
+              <span>Chegadas</span>
+              <strong id="decision-arrivals">—</strong>
+            </div>
+          </header>
+          <div id="decision-visual" class="decision-visual" aria-live="polite"></div>
+          <p id="decision-explanation" class="decision-explanation">Preparando a fotografia da decisão.</p>
+        </section>
 
         <div class="timeline-wrap" id="timeline-wrap" tabindex="0" aria-label="Diagrama temporal com rolagem horizontal">
           <table class="timeline" id="timeline"></table>
