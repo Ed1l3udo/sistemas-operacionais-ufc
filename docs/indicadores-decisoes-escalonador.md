@@ -123,12 +123,42 @@ mantém os resultados em cache durante a simulação. O limite de 1.000.000 de e
 de processo impede que o rastreamento opcional ocupe memória sem controle; o
 contrato JSON sem `--trace` permanece válido.
 
+## Transições entre fotografias
+
+As animações não mantêm um segundo estado da simulação nem antecipam decisões. A
+cada mudança do playback, o painel recebe uma nova fotografia determinística do
+motor C. O JavaScript identifica os elementos persistentes pelo processo, mede a
+posição anterior e interpola somente a apresentação até a posição da nova
+fotografia. Assim, avançar, retroceder e usar o scrubber sempre produzem o mesmo
+conteúdo final.
+
+- **FCFS:** processos recém-chegados surgem pelo lado da fila, cartões persistentes
+  se alinham na nova posição e o cartão despachado se desloca até a CPU. Processos
+  concluídos desaparecem na direção oposta ao avanço.
+- **SJF e SRTF:** linhas reordenam suavemente conforme o tempo restante e as barras
+  interpolam a escala anterior. Uma troca preemptiva recebe um pulso coral curto.
+- **Prioridade não preemptiva e preemptiva:** degraus mudam de nível sem salto e o
+  vencedor recebe uma ênfase luminosa breve. A variante preemptiva também sinaliza
+  visualmente a disputa que provocou a troca.
+- **Round-Robin:** cartões percorrem as posições da fila e a régua do quantum cresce
+  continuamente. Ao expirar a fatia, a seta circular completa uma volta curta para
+  reforçar o retorno ao fim da fila.
+- **Round-Robin com prioridade:** cartões se reorganizam pela prioridade efetiva,
+  as réguas de espera e quantum interpolam seu progresso e uma promoção por aging
+  recebe um realce breve sem sugerir preempção no meio da fatia.
+
+Entradas são escalonadas por poucos milissegundos para preservar a leitura da
+ordem, enquanto saídas usam cópias visuais temporárias removidas ao fim da
+transição. O conteúdo acessível permanece no estado atual; as cópias são ignoradas
+por tecnologias assistivas. Quando `prefers-reduced-motion: reduce` está ativo, a
+interface troca as fotografias imediatamente, sem executar essas interpolações.
+
 ## Regras de apresentação e aceite
 
 - Um único destaque identifica quem recebeu a CPU em `t`; valores e frase curta
   explicam a escolha. A timeline continua sendo a referência temporal.
-- Mudanças de cartão acompanham os controles atuais. Animações curtas só ilustram
-  a transição; `prefers-reduced-motion` permite vê-la sem movimento.
+- Mudanças de cartão acompanham os controles atuais. Animações de 260 a 520 ms só
+  ilustram a transição; `prefers-reduced-motion` troca o estado sem movimento.
 - Em telas estreitas, cartões passam a uma lista rolável com ordem e números
   preservados. Empate, CPU ociosa e processo único têm textos próprios.
 - Com muitos processos, mostrar os candidatos relevantes e uma contagem dos

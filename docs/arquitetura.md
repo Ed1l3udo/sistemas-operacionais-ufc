@@ -149,12 +149,16 @@ entrada textual inválida exibe o erro, mas não modifica a tabela.
 Depois da simulação, a comparação permite escolher um algoritmo por mouse ou
 teclado. O detalhe mostra a timeline, métricas individuais e o estado atual. O
 playback possui reinício, passo anterior, reprodução/pausa, passo seguinte,
-scrubber e três velocidades. A única animação temporal da aplicação ocorre nesses
-controles.
+scrubber e três velocidades. O playback controla tanto a timeline quanto as
+transições visuais entre as fotografias de decisão.
 
 Os indicadores de decisão específicos de cada política ficam entre o playback e a
 timeline. Eles exibem fila de chegada, comparadores de tempo restante, níveis de
 prioridade, fila circular/quantum ou prioridade efetiva/aging conforme o algoritmo.
+Os cartões preservados usam transições de posição, entradas e saídas recebem
+movimentos curtos e as réguas interpolam os valores. Essa camada é estritamente
+visual: não altera nem infere o estado produzido pelo C e é desativada quando o
+sistema solicita movimento reduzido.
 O desenho, contrato e critérios de aceite estão em
 [`indicadores-decisoes-escalonador.md`](indicadores-decisoes-escalonador.md).
 
