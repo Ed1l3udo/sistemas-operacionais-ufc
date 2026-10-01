@@ -385,8 +385,6 @@ decisão e transições. Também trata telas estreitas, foco de teclado e a pref
 - `docs/guia-de-codigo.md`: explicação arquivo a arquivo da implementação;
 - `Tarefa 01 - Escalonamento de Processos.pdf`: enunciado acadêmico que contextualiza
   o projeto;
-- `AGENTS.md`: convenções de desenvolvimento e decisões obrigatórias do
-  repositório;
 - `.gitignore`: exclui build, objetos, logs e arquivos locais do sistema.
 
 ## 6. Caminho completo de uma simulação
