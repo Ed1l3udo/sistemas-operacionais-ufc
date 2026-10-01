@@ -347,7 +347,9 @@ textarea[aria-invalid="true"] { border-color: var(--coral); }
 }
 .decision-arrivals span { color: #9caf9f; font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; }
 .decision-arrivals strong { color: var(--green); font-family: ui-monospace, monospace; }
-.decision-visual { min-height: 174px; margin-top: 24px; display: grid; align-items: center; }
+.decision-visual { min-height: 174px; margin-top: 24px; position: relative; display: grid; align-items: center; isolation: isolate; }
+.decision-motion-overlay { position: absolute; z-index: 3; inset: 0; overflow: hidden; pointer-events: none; }
+.decision-motion-ghost { z-index: 1; }
 .decision-explanation {
   margin: 22px 0 0;
   padding: 13px 16px;

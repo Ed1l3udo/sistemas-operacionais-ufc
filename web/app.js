@@ -14,6 +14,8 @@ const state = {
   request: null,
   traces: new Map(),
   traceRequest: 0,
+  lastDecisionView: null,
+  decisionMotionRevision: 0,
 };
 
 const elements = {
@@ -189,6 +191,7 @@ elements.form.addEventListener('submit', async (event) => {
     state.request = payload;
     state.traces = new Map();
     state.traceRequest += 1;
+    state.lastDecisionView = null;
     state.selectedAlgorithm = body.results[0]?.algorithm ?? null;
     state.second = 0;
     renderResults();
@@ -224,6 +227,7 @@ function selectComparisonRow(row) {
   stopPlayback();
   state.selectedAlgorithm = row.dataset.algorithm;
   state.second = 0;
+  state.lastDecisionView = null;
   for (const candidate of elements.comparison.querySelectorAll('tr')) {
     const selected = candidate === row;
     candidate.classList.toggle('selected', selected);
@@ -245,6 +249,8 @@ function selectedResult() {
 }
 
 function setDecisionLoading(message = 'Consultando o motor C…') {
+  state.lastDecisionView = null;
+  state.decisionMotionRevision += 1;
   elements.decisionTitle.textContent = 'Como a CPU foi escolhida';
   elements.decisionArrivals.textContent = '—';
   elements.decisionVisual.innerHTML = '<div class="decision-loading" aria-hidden="true"><span></span><span></span><span></span></div>';
@@ -291,7 +297,7 @@ function arrivalsAt(time) {
 
 function processCard(candidate, { selected = false, detail = '', accent = '' } = {}) {
   if (!candidate) return '<div class="process-card empty"><strong>CPU ociosa</strong><span>sem processo pronto</span></div>';
-  return `<div class="process-card ${selected ? 'selected' : ''}" ${accent ? `style="--card-accent:${accent}"` : ''}>
+  return `<div class="process-card ${selected ? 'selected' : ''}" data-motion-key="process-${candidate.id}" ${accent ? `style="--card-accent:${accent}"` : ''}>
     <strong>${candidate.id}</strong>
     <span>${detail}</span>
   </div>`;
@@ -303,6 +309,116 @@ function compactCandidates(candidates, limit = 12) {
 
 function overflowLabel(hidden) {
   return hidden ? `<span class="candidate-overflow">+${hidden} processo(s)</span>` : '';
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function captureDecisionMotion() {
+  elements.decisionVisual.querySelector('.decision-motion-overlay')?.remove();
+  const visualRect = elements.decisionVisual.getBoundingClientRect();
+  const items = new Map([...elements.decisionVisual.querySelectorAll('[data-motion-key]')].map((element) => {
+    const rect = element.getBoundingClientRect();
+    return [element.dataset.motionKey, {
+      clone: element.cloneNode(true),
+      rect: {
+        left: rect.left - visualRect.left,
+        top: rect.top - visualRect.top,
+        width: rect.width,
+        height: rect.height,
+      },
+    }];
+  }));
+  const progress = new Map([...elements.decisionVisual.querySelectorAll('[data-motion-progress]')]
+    .map((element) => [element.dataset.motionProgress, Number(element.dataset.motionValue)]));
+  return {
+    algorithm: elements.decisionVisual.dataset.algorithm,
+    time: Number(elements.decisionVisual.dataset.time),
+    items,
+    progress,
+  };
+}
+
+function playDecisionAnimation(element, keyframes, options) {
+  const animation = element.animate(keyframes, {
+    duration: 380,
+    easing: 'cubic-bezier(.22, 1, .36, 1)',
+    fill: 'both',
+    ...options,
+  });
+  animation.finished.then(() => animation.cancel()).catch(() => {});
+}
+
+function animateDecisionMotion(previous, algorithm, decision, revision) {
+  if (revision !== state.decisionMotionRevision || prefersReducedMotion()) return;
+  const samePolicy = previous?.algorithm === algorithm;
+  const direction = !previous || decision.time >= previous.time ? 1 : -1;
+  const currentItems = new Map([...elements.decisionVisual.querySelectorAll('[data-motion-key]')]
+    .map((element) => [element.dataset.motionKey, element]));
+
+  currentItems.forEach((element, key) => {
+    const prior = samePolicy ? previous.items.get(key) : null;
+    if (prior) {
+      const rect = element.getBoundingClientRect();
+      const visualRect = elements.decisionVisual.getBoundingClientRect();
+      const left = rect.left - visualRect.left;
+      const top = rect.top - visualRect.top;
+      const deltaX = prior.rect.left - left;
+      const deltaY = prior.rect.top - top;
+      if (Math.abs(deltaX) > 0.5 || Math.abs(deltaY) > 0.5) {
+        playDecisionAnimation(element, [
+          { transform: `translate(${deltaX}px, ${deltaY}px)` },
+          { transform: 'translate(0, 0)' },
+        ]);
+      }
+      return;
+    }
+    playDecisionAnimation(element, [
+      { opacity: 0, transform: `translateX(${direction * 18}px) scale(.97)` },
+      { opacity: 1, transform: 'translateX(0) scale(1)' },
+    ], { delay: Math.min(currentItems.size, 6) * 12 });
+  });
+
+  if (samePolicy) {
+    const outgoing = [...previous.items.entries()].filter(([key]) => !currentItems.has(key));
+    if (outgoing.length) {
+      const overlay = document.createElement('div');
+      overlay.className = 'decision-motion-overlay';
+      overlay.setAttribute('aria-hidden', 'true');
+      outgoing.forEach(([, item], index) => {
+        const ghost = item.clone;
+        ghost.removeAttribute('data-motion-key');
+        ghost.classList.add('decision-motion-ghost');
+        Object.assign(ghost.style, {
+          position: 'absolute',
+          left: `${item.rect.left}px`,
+          top: `${item.rect.top}px`,
+          width: `${item.rect.width}px`,
+          height: `${item.rect.height}px`,
+          margin: '0',
+        });
+        overlay.append(ghost);
+        playDecisionAnimation(ghost, [
+          { opacity: 1, transform: 'translateX(0) scale(1)' },
+          { opacity: 0, transform: `translateX(${-direction * 20}px) scale(.94)` },
+        ], { duration: 260, delay: index * 18 });
+      });
+      elements.decisionVisual.append(overlay);
+      window.setTimeout(() => overlay.remove(), 360 + outgoing.length * 18);
+    }
+  }
+
+  elements.decisionVisual.querySelectorAll('[data-motion-progress]').forEach((element) => {
+    const key = element.dataset.motionProgress;
+    const current = Number(element.dataset.motionValue);
+    const prior = samePolicy ? previous.progress.get(key) : 0;
+    if (!Number.isFinite(current) || current === prior) return;
+    playDecisionAnimation(element, [
+      { width: `${Number.isFinite(prior) ? prior : 0}%` },
+      { width: `${current}%` },
+    ], { duration: 440 });
+  });
 }
 
 function renderFcfs(decision) {
@@ -330,9 +446,12 @@ function remainingBars(decision, preemptive) {
   const visible = compactCandidates(ordered);
   return `<div class="remaining-comparison ${preemptive && decision.reason === 'preempt' ? 'has-preemption' : ''}">
     <div class="comparison-caption"><span>${preemptive ? 'Reavaliado a cada segundo' : 'Escolhido quando a CPU fica livre'}</span><strong>menor vence</strong></div>
-    ${visible.shown.map((candidate) => `<div class="remaining-row ${candidate.id === decision.selected ? 'winner' : ''}">
-      <strong>${candidate.id}</strong><div class="remaining-track"><span style="width:${Math.max(8, candidate.remaining / maximum * 100)}%"></span></div><b>${candidate.remaining} s</b>
-    </div>`).join('')}
+    ${visible.shown.map((candidate) => {
+      const percentage = Math.max(8, candidate.remaining / maximum * 100);
+      return `<div class="remaining-row ${candidate.id === decision.selected ? 'winner' : ''}" data-motion-key="remaining-${candidate.id}">
+      <strong>${candidate.id}</strong><div class="remaining-track"><span data-motion-progress="remaining-${candidate.id}" data-motion-value="${percentage}" style="width:${percentage}%"></span></div><b>${candidate.remaining} s</b>
+    </div>`;
+    }).join('')}
     ${overflowLabel(visible.hidden)}
   </div>`;
 }
@@ -342,7 +461,7 @@ function priorityLadder(decision, preemptive) {
   const visible = compactCandidates(ordered);
   return `<div class="priority-ladder ${preemptive && decision.reason === 'preempt' ? 'has-preemption' : ''}">
     <div class="ladder-scale"><span>prioridade mais alta</span><span>menor número</span></div>
-    ${visible.shown.map((candidate) => `<div class="priority-step ${candidate.id === decision.selected ? 'winner' : ''}" style="--priority-level:${candidate.priority}">
+    ${visible.shown.map((candidate) => `<div class="priority-step ${candidate.id === decision.selected ? 'winner' : ''}" data-motion-key="priority-${candidate.id}" style="--priority-level:${candidate.priority}">
       <strong>${candidate.id}</strong><span>prioridade ${candidate.priority}</span><small>${candidate.remaining} s restantes</small>
     </div>`).join('')}
     ${overflowLabel(visible.hidden)}
@@ -353,7 +472,7 @@ function quantumMeter(decision) {
   const used = decision.selected ? Math.min(decision.quantumLimit, decision.quantumUsed + 1) : 0;
   const percentage = decision.quantumLimit ? used / decision.quantumLimit * 100 : 0;
   return `<div class="quantum-meter"><div><span>Fatia atual</span><strong>${used}/${decision.quantumLimit} s</strong></div>
-    <div class="quantum-track"><span style="width:${percentage}%"></span></div>
+    <div class="quantum-track"><span data-motion-progress="quantum" data-motion-value="${percentage}" style="width:${percentage}%"></span></div>
   </div>`;
 }
 
@@ -383,10 +502,10 @@ function renderPriorityRoundRobin(decision) {
     <div class="aging-summary">${quantumMeter(decision)}<span>Sem preempção durante a fatia</span></div>
     <div class="aging-grid">${visible.shown.map((candidate) => {
       const progress = decision.quantumLimit ? candidate.readyWait % decision.quantumLimit / decision.quantumLimit * 100 : 0;
-      return `<div class="aging-card ${candidate.id === decision.selected ? 'winner' : ''}">
+      return `<div class="aging-card ${candidate.id === decision.selected ? 'winner' : ''}" data-motion-key="aging-${candidate.id}">
         <div><strong>${candidate.id}</strong><span>${candidate.priority} → <b>${candidate.effectivePriority}</b></span></div>
         <small>${candidate.readyWait} s de espera · ordem ${candidate.readyOrder + 1}</small>
-        <div class="aging-track"><span style="width:${progress}%"></span></div>
+        <div class="aging-track"><span data-motion-progress="aging-${candidate.id}" data-motion-value="${progress}" style="width:${progress}%"></span></div>
       </div>`;
     }).join('')}</div>${overflowLabel(visible.hidden)}
   </div>`;
@@ -430,13 +549,24 @@ function renderDecision() {
     rr: 'Fila circular e relógio do quantum', 'priority-rr': 'Prioridade efetiva e envelhecimento',
   };
   elements.decisionTitle.textContent = titles[result.algorithm];
-  if (result.algorithm === 'fcfs') elements.decisionVisual.innerHTML = renderFcfs(decision);
-  else if (result.algorithm === 'sjf') elements.decisionVisual.innerHTML = remainingBars(decision, false);
-  else if (result.algorithm === 'srtf') elements.decisionVisual.innerHTML = remainingBars(decision, true);
-  else if (result.algorithm === 'priority-np') elements.decisionVisual.innerHTML = priorityLadder(decision, false);
-  else if (result.algorithm === 'priority-p') elements.decisionVisual.innerHTML = priorityLadder(decision, true);
-  else if (result.algorithm === 'rr') elements.decisionVisual.innerHTML = renderRoundRobin(decision);
-  else elements.decisionVisual.innerHTML = renderPriorityRoundRobin(decision);
+  let content;
+  if (result.algorithm === 'fcfs') content = renderFcfs(decision);
+  else if (result.algorithm === 'sjf') content = remainingBars(decision, false);
+  else if (result.algorithm === 'srtf') content = remainingBars(decision, true);
+  else if (result.algorithm === 'priority-np') content = priorityLadder(decision, false);
+  else if (result.algorithm === 'priority-p') content = priorityLadder(decision, true);
+  else if (result.algorithm === 'rr') content = renderRoundRobin(decision);
+  else content = renderPriorityRoundRobin(decision);
+
+  const sameView = state.lastDecisionView?.algorithm === result.algorithm
+    && state.lastDecisionView.time === decision.time;
+  const previous = sameView ? null : captureDecisionMotion();
+  elements.decisionVisual.innerHTML = content;
+  elements.decisionVisual.dataset.algorithm = result.algorithm;
+  elements.decisionVisual.dataset.time = String(decision.time);
+  state.lastDecisionView = { algorithm: result.algorithm, time: decision.time };
+  const revision = ++state.decisionMotionRevision;
+  if (!sameView) requestAnimationFrame(() => animateDecisionMotion(previous, result.algorithm, decision, revision));
   elements.decisionExplanation.textContent = decisionExplanation(result, decision);
 }
 
