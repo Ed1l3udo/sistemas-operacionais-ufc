@@ -322,6 +322,7 @@ function captureDecisionMotion() {
     const rect = element.getBoundingClientRect();
     return [element.dataset.motionKey, {
       clone: element.cloneNode(true),
+      score: Number(element.dataset.motionScore),
       rect: {
         left: rect.left - visualRect.left,
         top: rect.top - visualRect.top,
@@ -335,6 +336,7 @@ function captureDecisionMotion() {
   return {
     algorithm: elements.decisionVisual.dataset.algorithm,
     time: Number(elements.decisionVisual.dataset.time),
+    selected: elements.decisionVisual.dataset.selected || null,
     items,
     progress,
   };
@@ -350,6 +352,78 @@ function playDecisionAnimation(element, keyframes, options) {
   animation.finished.then(() => animation.cancel()).catch(() => {});
 }
 
+function decisionEntrance(algorithm, direction) {
+  if (algorithm === 'fcfs') return `translateX(${direction * 32}px) scale(.97)`;
+  if (algorithm === 'rr') return `translate(${direction * 24}px, 7px) scale(.96)`;
+  if (algorithm.startsWith('priority')) return 'translateY(12px) scale(.98)';
+  return `translateY(${direction * 10}px) scale(.98)`;
+}
+
+function decisionExit(algorithm, direction) {
+  if (algorithm === 'fcfs') return `translateX(${-direction * 30}px) scale(.94)`;
+  if (algorithm === 'rr') return `translate(${-direction * 22}px, -9px) rotate(-3deg) scale(.94)`;
+  return `translateY(${-direction * 10}px) scale(.94)`;
+}
+
+function animatePolicyDecision(previous, algorithm, decision) {
+  const selectionChanged = previous?.selected !== decision.selected;
+  const selectedKey = decision.selected ? `process-${decision.selected}` : null;
+  const selected = (selectedKey && elements.decisionVisual.querySelector(`[data-motion-key="${selectedKey}"]`))
+    || elements.decisionVisual.querySelector('.winner');
+
+  if (selectionChanged && selected) {
+    playDecisionAnimation(selected, [
+      { filter: 'brightness(1)' },
+      { filter: 'brightness(1.16)', offset: .45 },
+      { filter: 'brightness(1)' },
+    ], { duration: 430 });
+  }
+
+  if (decision.reason === 'preempt') {
+    const dispute = elements.decisionVisual.querySelector('.has-preemption');
+    if (dispute) {
+      playDecisionAnimation(dispute, [
+        { boxShadow: '0 0 0 0 rgba(255, 118, 95, 0)' },
+        { boxShadow: '0 0 0 5px rgba(255, 118, 95, .18)', offset: .4 },
+        { boxShadow: '0 0 0 0 rgba(255, 118, 95, 0)' },
+      ], { duration: 520 });
+    }
+  }
+
+  if (algorithm === 'fcfs' && selectionChanged) {
+    const arrow = elements.decisionVisual.querySelector('.flow-arrow');
+    if (arrow) {
+      playDecisionAnimation(arrow, [
+        { translate: '8px 0', opacity: .45 },
+        { translate: '0 0', opacity: 1 },
+      ], { duration: 360 });
+    }
+  }
+
+  if (algorithm === 'rr' && decision.reason === 'quantum') {
+    const arrow = elements.decisionVisual.querySelector('.circular-arrow');
+    if (arrow) {
+      playDecisionAnimation(arrow, [
+        { transform: 'rotate(0)' },
+        { transform: 'rotate(360deg)' },
+      ], { duration: 520 });
+    }
+  }
+
+  if (algorithm === 'priority-rr' && previous?.algorithm === algorithm) {
+    elements.decisionVisual.querySelectorAll('.aging-card[data-motion-score]').forEach((card) => {
+      const prior = previous.items.get(card.dataset.motionKey)?.score;
+      const current = Number(card.dataset.motionScore);
+      if (!Number.isFinite(prior) || prior === current) return;
+      playDecisionAnimation(card, [
+        { filter: 'brightness(1)', boxShadow: '0 0 0 rgba(185, 238, 88, 0)' },
+        { filter: 'brightness(1.13)', boxShadow: '0 7px 18px rgba(185, 238, 88, .16)', offset: .45 },
+        { filter: 'brightness(1)', boxShadow: '0 0 0 rgba(185, 238, 88, 0)' },
+      ], { duration: 500 });
+    });
+  }
+}
+
 function animateDecisionMotion(previous, algorithm, decision, revision) {
   if (revision !== state.decisionMotionRevision || prefersReducedMotion()) return;
   const samePolicy = previous?.algorithm === algorithm;
@@ -357,7 +431,7 @@ function animateDecisionMotion(previous, algorithm, decision, revision) {
   const currentItems = new Map([...elements.decisionVisual.querySelectorAll('[data-motion-key]')]
     .map((element) => [element.dataset.motionKey, element]));
 
-  currentItems.forEach((element, key) => {
+  [...currentItems.entries()].forEach(([key, element], index) => {
     const prior = samePolicy ? previous.items.get(key) : null;
     if (prior) {
       const rect = element.getBoundingClientRect();
@@ -375,9 +449,9 @@ function animateDecisionMotion(previous, algorithm, decision, revision) {
       return;
     }
     playDecisionAnimation(element, [
-      { opacity: 0, transform: `translateX(${direction * 18}px) scale(.97)` },
-      { opacity: 1, transform: 'translateX(0) scale(1)' },
-    ], { delay: Math.min(currentItems.size, 6) * 12 });
+      { opacity: 0, transform: decisionEntrance(algorithm, direction) },
+      { opacity: 1, transform: 'translate(0, 0) scale(1)' },
+    ], { delay: Math.min(index, 6) * 34 });
   });
 
   if (samePolicy) {
@@ -401,7 +475,7 @@ function animateDecisionMotion(previous, algorithm, decision, revision) {
         overlay.append(ghost);
         playDecisionAnimation(ghost, [
           { opacity: 1, transform: 'translateX(0) scale(1)' },
-          { opacity: 0, transform: `translateX(${-direction * 20}px) scale(.94)` },
+          { opacity: 0, transform: decisionExit(algorithm, direction) },
         ], { duration: 260, delay: index * 18 });
       });
       elements.decisionVisual.append(overlay);
@@ -419,6 +493,8 @@ function animateDecisionMotion(previous, algorithm, decision, revision) {
       { width: `${current}%` },
     ], { duration: 440 });
   });
+
+  animatePolicyDecision(previous, algorithm, decision);
 }
 
 function renderFcfs(decision) {
@@ -502,7 +578,7 @@ function renderPriorityRoundRobin(decision) {
     <div class="aging-summary">${quantumMeter(decision)}<span>Sem preempção durante a fatia</span></div>
     <div class="aging-grid">${visible.shown.map((candidate) => {
       const progress = decision.quantumLimit ? candidate.readyWait % decision.quantumLimit / decision.quantumLimit * 100 : 0;
-      return `<div class="aging-card ${candidate.id === decision.selected ? 'winner' : ''}" data-motion-key="aging-${candidate.id}">
+      return `<div class="aging-card ${candidate.id === decision.selected ? 'winner' : ''}" data-motion-key="aging-${candidate.id}" data-motion-score="${candidate.effectivePriority}">
         <div><strong>${candidate.id}</strong><span>${candidate.priority} → <b>${candidate.effectivePriority}</b></span></div>
         <small>${candidate.readyWait} s de espera · ordem ${candidate.readyOrder + 1}</small>
         <div class="aging-track"><span data-motion-progress="aging-${candidate.id}" data-motion-value="${progress}" style="width:${progress}%"></span></div>
@@ -564,6 +640,7 @@ function renderDecision() {
   elements.decisionVisual.innerHTML = content;
   elements.decisionVisual.dataset.algorithm = result.algorithm;
   elements.decisionVisual.dataset.time = String(decision.time);
+  elements.decisionVisual.dataset.selected = decision.selected || '';
   state.lastDecisionView = { algorithm: result.algorithm, time: decision.time };
   const revision = ++state.decisionMotionRevision;
   if (!sameView) requestAnimationFrame(() => animateDecisionMotion(previous, result.algorithm, decision, revision));

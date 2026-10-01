@@ -350,6 +350,7 @@ textarea[aria-invalid="true"] { border-color: var(--coral); }
 .decision-visual { min-height: 174px; margin-top: 24px; position: relative; display: grid; align-items: center; isolation: isolate; }
 .decision-motion-overlay { position: absolute; z-index: 3; inset: 0; overflow: hidden; pointer-events: none; }
 .decision-motion-ghost { z-index: 1; }
+[data-motion-key], [data-motion-progress] { will-change: transform, opacity; }
 .decision-explanation {
   margin: 22px 0 0;
   padding: 13px 16px;
@@ -403,7 +404,7 @@ textarea[aria-invalid="true"] { border-color: var(--coral); }
 .remaining-row > strong, .remaining-row > b { font-family: ui-monospace, monospace; }
 .remaining-row > b { color: #aebdb4; font-size: .78rem; text-align: right; }
 .remaining-track { height: 15px; overflow: hidden; background: #102219; border: 1px solid #43594c; border-radius: 999px; }
-.remaining-track span { height: 100%; display: block; background: #6f8979; border-radius: inherit; transition: width .2s ease; }
+.remaining-track span { height: 100%; display: block; background: #6f8979; border-radius: inherit; }
 .remaining-row.winner { color: var(--green); }
 .remaining-row.winner .remaining-track { border-color: var(--green); }
 .remaining-row.winner .remaining-track span { background: var(--green); }
@@ -434,7 +435,7 @@ textarea[aria-invalid="true"] { border-color: var(--coral); }
 .quantum-meter > div:first-child { display: flex; justify-content: space-between; color: #9caf9f; font-size: .68rem; }
 .quantum-meter strong { color: #fff; font-family: ui-monospace, monospace; }
 .quantum-track, .aging-track { height: 7px; overflow: hidden; background: #102219; border-radius: 999px; }
-.quantum-track span, .aging-track span { height: 100%; display: block; background: var(--green); border-radius: inherit; transition: width .2s ease; }
+.quantum-track span, .aging-track span { height: 100%; display: block; background: var(--green); border-radius: inherit; }
 .card-row.numbered { align-items: flex-end; }
 .queue-position { position: relative; display: flex; padding-top: 17px; }
 .queue-position i { position: absolute; top: 0; left: 6px; color: #8fa298; font-family: ui-monospace, monospace; font-size: .65rem; font-style: normal; }
@@ -515,5 +516,5 @@ footer span { color: var(--coral); }
   html { scroll-behavior: auto; }
   .button { transition: none; }
   .decision-loading span { animation: none; }
-  .remaining-track span, .quantum-track span, .aging-track span { transition: none; }
+  [data-motion-key], [data-motion-progress] { will-change: auto; }
 }
