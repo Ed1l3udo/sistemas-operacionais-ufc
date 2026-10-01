@@ -1,30 +1,68 @@
-# Process Lab — Simulador de Escalonamento
+# Process Lab — simulador de escalonamento de processos
 
-Simulador acadêmico dos sete algoritmos pedidos na atividade de Sistemas
-Operacionais. O motor, as decisões de escalonamento e as métricas são implementados
-em C17; a interface web apenas envia a entrada ao mesmo executável e apresenta seu
-JSON.
+O Process Lab é um simulador acadêmico de políticas de escalonamento de CPU. O
+projeto permite descrever uma carga de processos, executar sete algoritmos sobre a
+mesma entrada e comparar a timeline e as métricas resultantes.
+
+Todas as regras de escalonamento são implementadas em C17. A mesma aplicação pode
+ser usada de duas formas:
+
+- pela linha de comando, com saída textual para leitura humana ou JSON;
+- por uma interface web local, que chama o executável C e apresenta os resultados
+  de forma interativa.
+
+## Funcionalidades
+
+- simulação discreta, com uma decisão de escalonamento por segundo;
+- FCFS, SJF, SRTF, prioridade não preemptiva, prioridade preemptiva,
+  Round-Robin e Round-Robin com prioridade e envelhecimento;
+- métricas individuais e médias de turnaround, espera e resposta;
+- contagem de trocas de contexto e timeline completa da CPU;
+- desempates pseudoaleatórios reproduzíveis por semente;
+- rastreamento opcional das decisões tomadas pelo motor;
+- comparação visual dos algoritmos e reprodução da timeline no navegador;
+- testes unitários do motor, testes da CLI e testes da API local.
 
 ## Requisitos
 
 - GCC com suporte a C17;
 - GNU Make;
-- Node.js 18 ou mais recente para a interface e os testes da API.
+- Node.js 18 ou mais recente, somente para a interface web e os testes da API.
 
-Não há dependências externas para instalar.
+O projeto não usa bibliotecas externas nem exige instalação por gerenciador de
+pacotes.
 
-No Windows, use o terminal **MSYS2 UCRT64**, com GCC, GNU Make e Node.js
-disponíveis no `PATH`. Nesse terminal, `make` pode ser chamado como
-`mingw32-make`. Os exemplos abaixo usam `make`; substitua pelo nome disponível
-no seu ambiente. O executável gerado no Windows é `build/scheduler.exe`; no
-Linux é `build/scheduler`.
+### Windows
 
-## Uso rápido
+Use preferencialmente o terminal **MSYS2 UCRT64**, com GCC, GNU Make e Node.js no
+`PATH`. Dependendo da instalação, o GNU Make pode estar disponível como
+`mingw32-make`; nesse caso, substitua `make` por `mingw32-make` nos comandos deste
+documento.
 
-Compile e execute todos os algoritmos com o exemplo do enunciado:
+O executável produzido no Windows é `build/scheduler.exe`. Em Linux, o nome é
+`build/scheduler`.
+
+## Compilação
+
+Na raiz do repositório, execute:
 
 ```sh
 make
+```
+
+O comando compila os arquivos de `src/` em C17 e gera o executável dentro de
+`build/`. Para remover os artefatos de compilação:
+
+```sh
+make clean
+```
+
+## Execução pela linha de comando
+
+A CLI recebe a lista de processos por `stdin` e exige um arquivo de configuração.
+Para executar todos os algoritmos com os exemplos incluídos no projeto:
+
+```sh
 ./build/scheduler \
   --config examples/config.txt \
   --algorithm all \
@@ -32,10 +70,57 @@ make
   --seed 42 < examples/processes.txt
 ```
 
-No Windows, troque `./build/scheduler` por `./build/scheduler.exe` nos comandos
-da CLI. `make test` e `make web` escolhem automaticamente o nome adequado.
+No Windows, execute `./build/scheduler.exe` no terminal MSYS2.
 
-Para receber o contrato usado pela interface web:
+### Formato dos processos
+
+Cada linha da entrada representa um processo e contém três inteiros:
+
+```text
+chegada duração prioridade
+```
+
+Exemplo:
+
+```text
+0 5 2
+0 2 3
+1 4 1
+3 3 4
+```
+
+A chegada deve ser maior ou igual a zero; duração e prioridade devem ser
+positivas. Prioridades numericamente menores são mais altas. Os IDs `P1`, `P2`,
+etc. são atribuídos na ordem das linhas, mesmo que as chegadas estejam fora de
+ordem. Linhas vazias e linhas iniciadas por `#` são ignoradas.
+
+### Arquivo de configuração
+
+O arquivo informado em `--config` deve declarar o quantum e a taxa de aging:
+
+```text
+quantum:2
+aging:1
+```
+
+O quantum deve ser positivo. O aging pode ser zero para desativar a melhora
+gradual de prioridade no Round-Robin com prioridade.
+
+### Opções da CLI
+
+| Opção | Descrição | Padrão |
+| --- | --- | --- |
+| `--config ARQUIVO` | Caminho da configuração; é obrigatório. | — |
+| `--algorithm NOME` | Algoritmo a executar ou `all`. | `all` |
+| `--format FORMATO` | Saída `text` ou `json`. | `text` |
+| `--seed N` | Semente inteira sem sinal para desempates. | `42` |
+| `--trace` | Inclui as decisões por segundo; exige JSON e um único algoritmo. | desativado |
+| `--help`, `-h` | Exibe a ajuda da CLI. | — |
+
+Os nomes aceitos em `--algorithm` são `fcfs`, `sjf`, `srtf`, `priority-np`,
+`priority-p`, `rr`, `priority-rr` e `all`.
+
+Para obter JSON:
 
 ```sh
 ./build/scheduler \
@@ -45,8 +130,7 @@ Para receber o contrato usado pela interface web:
   --seed 42 < examples/processes.txt
 ```
 
-Para inspecionar as decisões de uma política segundo a segundo, acrescente
-`--trace` a uma execução JSON de um único algoritmo:
+Para inspecionar as decisões de um algoritmo segundo a segundo:
 
 ```sh
 ./build/scheduler \
@@ -56,78 +140,60 @@ Para inspecionar as decisões de uma política segundo a segundo, acrescente
   --trace < examples/processes.txt
 ```
 
-O rastreamento inclui CPU anterior, processo escolhido, candidatos, tempos
-restantes, prioridades, estado do aging e consumo do quantum. Ele é opcional
-para manter a saída normal compacta.
+Resultados válidos são escritos em `stdout`; ajuda e diagnósticos de erro usam os
+fluxos apropriados sem misturar mensagens com o JSON. Entradas inválidas encerram
+o programa com código diferente de zero.
 
-Os valores aceitos por `--algorithm` são `all`, `fcfs`, `sjf`, `srtf`,
-`priority-np`, `priority-p`, `rr` e `priority-rr`. O formato pode ser `text` ou
-`json`. A semente é opcional e vale `42` por padrão.
+## Execução da interface web
 
-Cada linha de `stdin` contém três inteiros:
-
-```text
-chegada duração prioridade
-```
-
-A chegada deve ser não negativa; duração e prioridade devem ser positivas. Os IDs
-seguem a ordem das linhas, mesmo quando as chegadas estão fora de ordem. O arquivo
-de configuração tem este formato:
-
-```text
-quantum:2
-aging:1
-```
-
-Resultados são escritos somente em `stdout`. Diagnósticos são escritos em
-`stderr`, e qualquer entrada inválida produz código de saída diferente de zero.
-
-## Interface web
+Compile o motor e inicie o servidor local com:
 
 ```sh
 make web
 ```
 
-Acesse <http://127.0.0.1:3000>. Para escolher outra porta:
+Depois, acesse [http://127.0.0.1:3000](http://127.0.0.1:3000). Para escolher outra
+porta em um shell compatível com POSIX:
 
 ```sh
 PORT=8080 make web
 ```
 
-A tela mantém a tabela editável sincronizada com a entrada textual, compara os
-algoritmos selecionados e oferece controles para reproduzir, pausar, avançar,
-retroceder e reiniciar a timeline. Para cada política, um painel específico mostra
-a fila ou comparação que levou à decisão corrente. Texto inválido não substitui a
-última tabela válida.
+A página permite editar processos, selecionar algoritmos, comparar métricas e
+percorrer a timeline. O navegador não reimplementa os algoritmos: ele envia a
+entrada ao servidor Node.js, que executa o mesmo binário C usado pela CLI.
 
 ## Testes
 
+Execute toda a suíte com:
+
 ```sh
 make test
+```
+
+Esse alvo executa os testes C do motor, os cenários da CLI e, quando o Node.js está
+disponível, os testes HTTP da API.
+
+Em Linux, também é possível recompilar os testes com AddressSanitizer e
+UndefinedBehaviorSanitizer:
+
+```sh
 make sanitize
 ```
 
-`make test` executa timelines calculadas manualmente, validações da CLI e testes da
-API que comparam sua resposta com o JSON direto do binário C. O teste HTTP abre
-somente uma porta efêmera em `127.0.0.1`.
+O alvo de sanitizadores não é suportado pelo GCC padrão do MSYS2 UCRT64.
 
-`make sanitize` recompila os testes com AddressSanitizer e
-UndefinedBehaviorSanitizer. A detecção de leaks do ASan fica desabilitada para
-compatibilidade com ambientes executados sob `ptrace`. Execute esse alvo no Linux:
-o GCC do MSYS2 UCRT64 não inclui as bibliotecas desses sanitizadores.
-
-## Estrutura
+## Organização do repositório
 
 ```text
-include/      contrato público do motor C
-src/          parser, algoritmos, CLI e serialização
-tests/        testes C, CLI e API
+include/      contrato público compartilhado pelos módulos C
+src/          CLI, leitura de entrada, motor e serialização
+tests/        testes unitários, de integração da CLI e da API
 web/          servidor Node.js e interface estática
-examples/     entrada e configuração do enunciado
-docs/         documentação técnica
+examples/     carga de processos e configuração de demonstração
+docs/         documentação técnica e guia de leitura do código
 ```
 
-As decisões de implementação e regras detalhadas estão em
-[`docs/arquitetura.md`](docs/arquitetura.md). O fluxo de contribuição do repositório
-está em [`AGENTS.md`](AGENTS.md).
-
+Para estudar a implementação arquivo a arquivo, consulte o
+[guia de código](docs/guia-de-codigo.md). As regras arquiteturais e decisões do
+simulador estão resumidas no [documento técnico](docs/arquitetura.md).
