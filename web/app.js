@@ -342,14 +342,21 @@ function captureDecisionMotion() {
   };
 }
 
-function playDecisionAnimation(element, keyframes, options) {
+function playDecisionAnimation(element, keyframes, options = {}) {
+  const { onFinish, ...timing } = options;
   const animation = element.animate(keyframes, {
     duration: 380,
     easing: 'cubic-bezier(.22, 1, .36, 1)',
     fill: 'both',
-    ...options,
+    ...timing,
   });
-  animation.finished.then(() => animation.cancel()).catch(() => {});
+  animation.finished.then(
+    () => {
+      if (onFinish) onFinish();
+      else animation.cancel();
+    },
+    () => onFinish?.(),
+  ).catch(() => {});
 }
 
 function decisionEntrance(algorithm, direction) {
@@ -471,12 +478,20 @@ function animateDecisionMotion(previous, algorithm, decision, revision) {
           width: `${item.rect.width}px`,
           height: `${item.rect.height}px`,
           margin: '0',
+          opacity: '0',
         });
         overlay.append(ghost);
         playDecisionAnimation(ghost, [
           { opacity: 1, transform: 'translateX(0) scale(1)' },
           { opacity: 0, transform: decisionExit(algorithm, direction) },
-        ], { duration: 260, delay: index * 18 });
+        ], {
+          duration: 260,
+          delay: index * 18,
+          onFinish: () => {
+            ghost.remove();
+            if (!overlay.childElementCount) overlay.remove();
+          },
+        });
       });
       elements.decisionVisual.append(overlay);
       window.setTimeout(() => overlay.remove(), 360 + outgoing.length * 18);
