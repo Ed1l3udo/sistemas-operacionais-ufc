@@ -16,6 +16,7 @@ typedef enum {
 } ProcessStatus;
 
 typedef struct {
+    /* IDs follow input order; runtime fields belong to a simulation copy. */
     int id;
     int arrival_time;
     int burst_time;
@@ -36,6 +37,7 @@ typedef struct {
 void process_list_init(ProcessList *list);
 bool process_list_append(ProcessList *list, int arrival_time, int burst_time,
                          int static_priority, SchedulerError *error);
+/* Replaces destination with a deep copy; source remains unchanged. */
 bool process_list_clone(const ProcessList *source, ProcessList *destination,
                         SchedulerError *error);
 void process_list_destroy(ProcessList *list);

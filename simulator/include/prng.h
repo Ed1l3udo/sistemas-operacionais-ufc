@@ -11,6 +11,7 @@ typedef struct {
 
 void prng_init(Prng *prng, uint64_t seed);
 uint64_t prng_next(Prng *prng);
+/* Uses rejection sampling so bounded results have no modulo bias. */
 bool prng_next_bounded(Prng *prng, size_t bound, size_t *value);
 
 #endif

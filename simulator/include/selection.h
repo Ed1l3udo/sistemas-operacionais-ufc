@@ -7,6 +7,7 @@
 #include "prng.h"
 #include "simulation.h"
 
+/* Prefers current CPU, then shorter remaining time, then the supplied PRNG. */
 bool selection_break_tie(const Simulation *simulation,
                          const IndexList *candidates,
                          size_t current_process_index,

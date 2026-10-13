@@ -447,6 +447,7 @@ static bool scheduler_run_round_robin_common(const ProcessList *source,
         ++quantum_used;
         if (quantum_used == quantum) {
             if (use_priority) {
+                /* Arrivals at the new instant are admitted on the next loop. */
                 apply_aging(&working, aging);
             }
             if (working.current_process_index != SIMULATION_NO_PROCESS) {

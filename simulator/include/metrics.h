@@ -25,6 +25,7 @@ typedef struct {
 
 void metrics_report_init(MetricsReport *report);
 void metrics_report_destroy(MetricsReport *report);
+/* Validates a completed simulation and replaces report only on success. */
 bool metrics_calculate(const Simulation *simulation, MetricsReport *report,
                        SchedulerError *error);
 

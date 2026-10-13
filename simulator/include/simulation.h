@@ -27,10 +27,12 @@ const Process *simulation_current_process_const(const Simulation *simulation);
 bool simulation_is_complete(const Simulation *simulation);
 bool simulation_has_ready_process(const Simulation *simulation);
 bool simulation_next_arrival(const Simulation *simulation, int64_t *arrival_time);
+/* If requested, admitted receives only NEW->READY indices from this call. */
 bool simulation_admit_current(Simulation *simulation, IndexList *admitted,
                               SchedulerError *error);
 bool simulation_dispatch(Simulation *simulation, size_t process_index,
                          SchedulerError *error);
+/* Records one [current_time, current_time + 1) interval for the running process. */
 bool simulation_execute_second(Simulation *simulation, SchedulerError *error);
 bool simulation_record_idle_second(Simulation *simulation, SchedulerError *error);
 bool simulation_preempt_current(Simulation *simulation, size_t *preempted_index,

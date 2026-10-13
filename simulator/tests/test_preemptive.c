@@ -135,14 +135,20 @@ static void test_seed_reproducibility(void)
     Simulation first;
     Simulation second;
     SchedulerError error;
+    size_t index;
 
     error_clear(&error);
     TEST_ASSERT(build_list(&source, values, 3, &error));
     TEST_ASSERT(scheduler_run_srtf(&source, 88, &first, &error));
     TEST_ASSERT(scheduler_run_srtf(&source, 88, &second, &error));
     TEST_ASSERT(first.timeline.count == second.timeline.count);
-    TEST_ASSERT(memcmp(first.timeline.items, second.timeline.items,
-                       first.timeline.count * sizeof(*first.timeline.items)) == 0);
+    for (index = 0; index < first.timeline.count && index < second.timeline.count;
+         ++index) {
+        TEST_ASSERT(first.timeline.items[index].start_time ==
+                    second.timeline.items[index].start_time);
+        TEST_ASSERT(first.timeline.items[index].process_id ==
+                    second.timeline.items[index].process_id);
+    }
     simulation_destroy(&second);
     simulation_destroy(&first);
     process_list_destroy(&source);
