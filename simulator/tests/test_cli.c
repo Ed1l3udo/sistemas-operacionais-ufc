@@ -28,6 +28,7 @@ static void test_default_and_algorithms(void)
     TEST_ASSERT(parse_arguments(2, default_arguments, &options, &error) ==
                 CLI_PARSE_OK);
     TEST_ASSERT(options.algorithm == ALGORITHM_ALL);
+    TEST_ASSERT(options.output_format == OUTPUT_FORMAT_TEXT);
     for (index = 0; index < sizeof(names) / sizeof(names[0]); ++index) {
         char *arguments[] = {"scheduler", "config.txt", "--algorithm",
                              (char *)names[index]};
@@ -46,26 +47,34 @@ static void test_seed_and_help(void)
     char *large_seed[] = {"scheduler", "config.txt", "--seed",
                           "18446744073709551615"};
     char *help[] = {"scheduler", "--help"};
+    char *help_json[] = {"scheduler", "--help", "--json"};
+    char *json[] = {"scheduler", "config.txt", "--algorithm", "srtf",
+                    "--seed", "0", "--json"};
 
     TEST_ASSERT(parse_arguments(4, zero_seed, &options, &error) == CLI_PARSE_OK);
     TEST_ASSERT(options.seed_provided && options.seed == 0);
     TEST_ASSERT(parse_arguments(4, large_seed, &options, &error) == CLI_PARSE_OK);
     TEST_ASSERT(options.seed == UINT64_MAX);
+    TEST_ASSERT(parse_arguments(7, json, &options, &error) == CLI_PARSE_OK);
+    TEST_ASSERT(options.algorithm == ALGORITHM_SRTF && options.seed == 0 &&
+                options.output_format == OUTPUT_FORMAT_JSON);
     TEST_ASSERT(parse_arguments(2, help, &options, &error) == CLI_PARSE_HELP);
+    TEST_ASSERT(parse_arguments(3, help_json, &options, &error) == CLI_PARSE_HELP);
 }
 
 static void test_invalid_cli(void)
 {
-    static char *invalid_arguments[][5] = {
+    static char *invalid_arguments[][6] = {
         {"scheduler", "config.txt", "--algorithm", "invalid", NULL},
         {"scheduler", "config.txt", "--seed", "-1", NULL},
         {"scheduler", "config.txt", "--seed", "word", NULL},
         {"scheduler", "config.txt", "--seed", "18446744073709551616", NULL},
         {"scheduler", "config.txt", "--unknown", NULL, NULL},
         {"scheduler", "config.txt", "--algorithm", NULL, NULL},
+        {"scheduler", "config.txt", "--json", "--json", NULL, NULL},
         {"scheduler", NULL, NULL, NULL, NULL}
     };
-    static const int argument_counts[] = {4, 4, 4, 4, 3, 3, 1};
+    static const int argument_counts[] = {4, 4, 4, 4, 3, 3, 4, 1};
     size_t index;
 
     for (index = 0; index < sizeof(argument_counts) / sizeof(argument_counts[0]);

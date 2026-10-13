@@ -6,6 +6,7 @@
 
 #include "cli.h"
 #include "config.h"
+#include "json_output.h"
 #include "metrics.h"
 #include "output.h"
 #include "process.h"
@@ -48,20 +49,37 @@ static bool run_algorithm(AlgorithmType algorithm, const ProcessList *processes,
     return functions[algorithm](processes, seed, simulation, error);
 }
 
+static bool execute_algorithm(AlgorithmType algorithm,
+                              const ProcessList *processes,
+                              const Config *config, uint64_t seed,
+                              Simulation *simulation, MetricsReport *report,
+                              SchedulerError *error)
+{
+    bool success;
+
+    *simulation = (Simulation){0};
+    metrics_report_init(report);
+    success = run_algorithm(algorithm, processes, config, seed, simulation, error);
+    if (success) {
+        success = metrics_calculate(simulation, report, error);
+    }
+    if (!success) {
+        metrics_report_destroy(report);
+        simulation_destroy(simulation);
+    }
+    return success;
+}
+
 static bool execute_and_print(AlgorithmType algorithm,
                               const ProcessList *processes,
                               const Config *config, uint64_t seed, FILE *output,
                               SchedulerError *error)
 {
-    Simulation simulation = {0};
+    Simulation simulation;
     MetricsReport report;
-    bool success;
+    bool success = execute_algorithm(algorithm, processes, config, seed,
+                                     &simulation, &report, error);
 
-    metrics_report_init(&report);
-    success = run_algorithm(algorithm, processes, config, seed, &simulation, error);
-    if (success) {
-        success = metrics_calculate(&simulation, &report, error);
-    }
     if (success) {
         success = output_print_report(output, algorithm, config, &simulation,
                                       &report, error);
@@ -69,6 +87,75 @@ static bool execute_and_print(AlgorithmType algorithm,
     metrics_report_destroy(&report);
     simulation_destroy(&simulation);
     return success;
+}
+
+static bool execute_and_write_json(AlgorithmType algorithm,
+                                   const ProcessList *processes,
+                                   const Config *config, uint64_t seed,
+                                   FILE *stream, bool prepend_comma,
+                                   SchedulerError *error)
+{
+    Simulation simulation;
+    MetricsReport report;
+    bool success = execute_algorithm(algorithm, processes, config, seed,
+                                     &simulation, &report, error);
+
+    if (success) {
+        success = json_output_write_algorithm(stream, algorithm, &simulation,
+                                              &report, prepend_comma, error);
+    }
+    metrics_report_destroy(&report);
+    simulation_destroy(&simulation);
+    return success;
+}
+
+static bool copy_stream(FILE *source, FILE *destination, SchedulerError *error)
+{
+    unsigned char buffer[4096];
+    size_t count;
+
+    if (fflush(source) != 0 || fseek(source, 0, SEEK_SET) != 0) {
+        error_set(error, EXIT_CODE_INTERNAL, "unable to finalize JSON output");
+        return false;
+    }
+    while ((count = fread(buffer, 1, sizeof(buffer), source)) > 0) {
+        if (fwrite(buffer, 1, count, destination) != count) {
+            error_set(error, EXIT_CODE_INTERNAL, "unable to write JSON output");
+            return false;
+        }
+    }
+    if (ferror(source) || ferror(destination)) {
+        error_set(error, EXIT_CODE_INTERNAL, "unable to copy JSON output");
+        return false;
+    }
+    return true;
+}
+
+static bool write_json_document(FILE *stream, AlgorithmType requested,
+                                const ProcessList *processes,
+                                const Config *config, uint64_t seed,
+                                SchedulerError *error)
+{
+    AlgorithmType algorithm;
+    bool first = true;
+
+    if (!json_output_begin_document(stream, seed, config, error)) {
+        return false;
+    }
+    if (requested == ALGORITHM_ALL) {
+        for (algorithm = ALGORITHM_FCFS; algorithm <= ALGORITHM_PRIORITY_RR;
+             ++algorithm) {
+            if (!execute_and_write_json(algorithm, processes, config, seed, stream,
+                                        !first, error)) {
+                return false;
+            }
+            first = false;
+        }
+    } else if (!execute_and_write_json(requested, processes, config, seed, stream,
+                                       false, error)) {
+        return false;
+    }
+    return json_output_end_document(stream, error);
 }
 
 int scheduler_run_application(int argc, char *argv[], FILE *input,
@@ -81,6 +168,7 @@ int scheduler_run_application(int argc, char *argv[], FILE *input,
     CliParseResult cli_result;
     uint64_t seed;
     AlgorithmType algorithm;
+    FILE *json_stream = NULL;
     int exit_code = EXIT_CODE_SUCCESS;
 
     if (input == NULL || output == NULL || errors == NULL) {
@@ -108,6 +196,33 @@ int scheduler_run_application(int argc, char *argv[], FILE *input,
         goto cleanup;
     }
     seed = options.seed_provided ? options.seed : automatic_seed();
+    if (options.output_format == OUTPUT_FORMAT_JSON) {
+        json_stream = tmpfile();
+        if (json_stream == NULL) {
+            error_set(&error, EXIT_CODE_INTERNAL,
+                      "unable to create temporary JSON output");
+            fprintf(errors, "scheduler: %s\n", error.message);
+            exit_code = error.code;
+            goto cleanup;
+        }
+        if (!write_json_document(json_stream, options.algorithm, &processes,
+                                 &config, seed, &error) ||
+            !copy_stream(json_stream, output, &error)) {
+            fprintf(errors, "scheduler: %s\n", error.message);
+            exit_code = error.code;
+            goto cleanup;
+        }
+        if (fclose(json_stream) != 0) {
+            json_stream = NULL;
+            error_set(&error, EXIT_CODE_INTERNAL,
+                      "unable to close temporary JSON output");
+            fprintf(errors, "scheduler: %s\n", error.message);
+            exit_code = error.code;
+            goto cleanup;
+        }
+        json_stream = NULL;
+        goto cleanup;
+    }
     if (fprintf(output, "Seed: %" PRIu64 "\n\n", seed) < 0) {
         error_set(&error, EXIT_CODE_INTERNAL, "unable to write scheduler output");
         fprintf(errors, "scheduler: %s\n", error.message);
@@ -138,6 +253,10 @@ int scheduler_run_application(int argc, char *argv[], FILE *input,
     }
 
 cleanup:
+    if (json_stream != NULL && fclose(json_stream) != 0 &&
+        exit_code == EXIT_CODE_SUCCESS) {
+        exit_code = EXIT_CODE_INTERNAL;
+    }
     process_list_destroy(&processes);
     return exit_code;
 }

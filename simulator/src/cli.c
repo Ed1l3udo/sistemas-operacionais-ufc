@@ -54,13 +54,14 @@ CliParseResult cli_parse(int argc, char *argv[], CliOptions *options,
 {
     bool algorithm_seen = false;
     bool seed_seen = false;
+    bool json_seen = false;
     int index;
 
     if (options == NULL) {
         error_set(error, EXIT_CODE_INTERNAL, "invalid CLI options destination");
         return CLI_PARSE_ERROR;
     }
-    if (argc == 2 && strcmp(argv[1], "--help") == 0) {
+    if (argc >= 2 && strcmp(argv[1], "--help") == 0) {
         return CLI_PARSE_HELP;
     }
     if (argc < 2) {
@@ -76,6 +77,7 @@ CliParseResult cli_parse(int argc, char *argv[], CliOptions *options,
     options->algorithm = ALGORITHM_ALL;
     options->seed_provided = false;
     options->seed = 0;
+    options->output_format = OUTPUT_FORMAT_TEXT;
 
     for (index = 2; index < argc; ++index) {
         if (strcmp(argv[index], "--algorithm") == 0) {
@@ -113,6 +115,14 @@ CliParseResult cli_parse(int argc, char *argv[], CliOptions *options,
             }
             options->seed_provided = true;
             seed_seen = true;
+        } else if (strcmp(argv[index], "--json") == 0) {
+            if (json_seen) {
+                error_set(error, EXIT_CODE_USAGE,
+                          "--json may only be provided once");
+                return CLI_PARSE_ERROR;
+            }
+            options->output_format = OUTPUT_FORMAT_JSON;
+            json_seen = true;
         } else {
             error_set(error, EXIT_CODE_USAGE, "unknown option '%s'", argv[index]);
             return CLI_PARSE_ERROR;
@@ -125,8 +135,9 @@ CliParseResult cli_parse(int argc, char *argv[], CliOptions *options,
 void cli_print_usage(FILE *stream, const char *program_name)
 {
     fprintf(stream,
-            "Usage: %s <config-file> [--algorithm <name>] [--seed <uint64>]\n"
+            "Usage: %s <config-file> [--algorithm <name>] [--seed <uint64>] [--json]\n"
             "Algorithms: all, fcfs, sjf, srtf, priority-np, priority-p, rr, "
-            "priority-rr\n",
+            "priority-rr\n"
+            "Output: text (default) or JSON with --json\n",
             program_name);
 }

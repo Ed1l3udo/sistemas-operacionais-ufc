@@ -32,10 +32,11 @@ prioridade dinâmica é considerada no próximo despacho.
 - métricas individuais e médias de turnaround, espera e resposta;
 - contagem uniforme de trocas de contexto;
 - timeline vertical com o estado de cada processo;
+- saída JSON estável para integração com outras aplicações;
 - testes automatizados para entrada, núcleo, algoritmos, métricas, saída e CLI.
 
-JSON, servidor e interface web não fazem parte da implementação atual. Eles
-podem ser extensões futuras.
+Servidor e interface web não fazem parte da implementação atual. Eles podem
+consumir o modo JSON em extensões futuras.
 
 ## Estrutura do repositório
 
@@ -137,6 +138,7 @@ Em sistemas com shell compatível com POSIX:
 ./scheduler ../examples/config.txt --algorithm priority-p < ../examples/processes.txt
 ./scheduler ../examples/config.txt --algorithm rr < ../examples/processes.txt
 ./scheduler ../examples/config.txt --algorithm priority-rr < ../examples/processes.txt
+./scheduler ../examples/config.txt --algorithm all --seed 0 --json < ../examples/processes.txt
 ./scheduler --help
 ```
 
@@ -184,6 +186,21 @@ Tempo médio de resposta: 3.25
 Trocas de contexto: 3
 ```
 
+### JSON
+
+Use `--json` para escrever exclusivamente um documento JSON em `stdout`:
+
+```bash
+./scheduler ../examples/config.txt --algorithm all --seed 0 --json < ../examples/processes.txt
+```
+
+O documento contém `schemaVersion: 1`, `seed` como string decimal (para não
+perder precisão de `uint64_t` em JavaScript), `config` e um array
+`algorithms`. Cada algoritmo inclui `id`, `name`, métricas, processos finais e
+uma timeline por segundo. CPU ociosa é representada por `"processId": null`,
+não pelo identificador interno zero. O JSON é adequado para consumo futuro por
+um servidor ou interface, que continuam fora deste projeto.
+
 ## Testes
 
 Com `make`:
@@ -204,7 +221,7 @@ gcc -Iinclude -std=c17 -Wall -Wextra -Wpedantic \
 
 No ambiente avaliado, a suíte cobre parsing, CLI, motor temporal, estruturas
 dinâmicas, PRNG, desempates, os sete algoritmos, métricas, saída e integração
-da aplicação. O alvo `make sanitize` tenta AddressSanitizer e
+da aplicação, inclusive o schema JSON e o modo transacional. O alvo `make sanitize` tenta AddressSanitizer e
 UndefinedBehaviorSanitizer; sua disponibilidade depende do toolchain instalado.
 
 ## Decisões principais

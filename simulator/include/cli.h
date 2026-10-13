@@ -18,11 +18,17 @@ typedef enum {
     ALGORITHM_PRIORITY_RR
 } AlgorithmType;
 
+typedef enum {
+    OUTPUT_FORMAT_TEXT,
+    OUTPUT_FORMAT_JSON
+} OutputFormat;
+
 typedef struct {
     const char *config_path;
     AlgorithmType algorithm;
     bool seed_provided;
     uint64_t seed;
+    OutputFormat output_format;
 } CliOptions;
 
 typedef enum {

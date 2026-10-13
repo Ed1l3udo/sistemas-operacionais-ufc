@@ -180,8 +180,92 @@ static void test_seed_reproducibility_and_errors(void)
     TEST_ASSERT(fclose(errors) == 0 && fclose(output) == 0);
 }
 
+static void test_json_application_output(void)
+{
+    const char *input_text = "0 5 2\n0 2 3\n1 4 1\n3 3 4\n";
+    char *all_arguments[] = {"scheduler", "tests/fixtures/valid-config.txt",
+                             "--algorithm", "all", "--seed", "0", "--json"};
+    char *max_seed_arguments[] = {"scheduler", "tests/fixtures/valid-config.txt",
+                                  "--algorithm", "fcfs", "--seed",
+                                  "18446744073709551615", "--json"};
+    char *idle_arguments[] = {"scheduler", "tests/fixtures/valid-config.txt",
+                              "--algorithm", "rr", "--seed", "0", "--json"};
+    char *automatic_arguments[] = {"scheduler", "tests/fixtures/valid-config.txt",
+                                   "--algorithm", "fcfs", "--json"};
+    char *help_json[] = {"scheduler", "--help", "--json"};
+    FILE *output;
+    FILE *errors;
+    char *text;
+    char *error_text;
+    const char *ids[] = {"\"id\": \"fcfs\"", "\"id\": \"sjf\"",
+                         "\"id\": \"srtf\"", "\"id\": \"priority-np\"",
+                         "\"id\": \"priority-p\"", "\"id\": \"rr\"",
+                         "\"id\": \"priority-rr\""};
+    const char *previous = NULL;
+    size_t index;
+
+    TEST_ASSERT(run_app(all_arguments, 7, input_text, &output, &errors) == 0);
+    text = stream_text(output);
+    error_text = stream_text(errors);
+    TEST_ASSERT(text != NULL && error_text != NULL);
+    if (text != NULL && error_text != NULL) {
+        TEST_ASSERT(strstr(text, "\"schemaVersion\": 1") != NULL);
+        TEST_ASSERT(strstr(text, "\"seed\": \"0\"") != NULL);
+        TEST_ASSERT(strstr(text, "\"contextSwitches\": 7") != NULL);
+        TEST_ASSERT(strstr(text, "Seed:") == NULL && strstr(text, "===") == NULL);
+        TEST_ASSERT(error_text[0] == '\0');
+        for (index = 0; index < sizeof(ids) / sizeof(ids[0]); ++index) {
+            const char *current = strstr(text, ids[index]);
+
+            TEST_ASSERT(current != NULL && (previous == NULL || current > previous));
+            previous = current;
+        }
+    }
+    free(error_text);
+    free(text);
+    TEST_ASSERT(fclose(errors) == 0 && fclose(output) == 0);
+
+    TEST_ASSERT(run_app(max_seed_arguments, 7, input_text, &output, &errors) == 0);
+    text = stream_text(output);
+    TEST_ASSERT(text != NULL &&
+                strstr(text, "\"seed\": \"18446744073709551615\"") != NULL);
+    free(text);
+    TEST_ASSERT(fclose(errors) == 0 && fclose(output) == 0);
+
+    TEST_ASSERT(run_app(idle_arguments, 7, "2 1 1\n", &output, &errors) == 0);
+    text = stream_text(output);
+    TEST_ASSERT(text != NULL && strstr(text, "\"processId\": null") != NULL);
+    free(text);
+    TEST_ASSERT(fclose(errors) == 0 && fclose(output) == 0);
+
+    TEST_ASSERT(run_app(automatic_arguments, 5, input_text, &output, &errors) == 0);
+    text = stream_text(output);
+    TEST_ASSERT(text != NULL && strstr(text, "\"seed\": \"") != NULL &&
+                strstr(text, "Seed:") == NULL);
+    free(text);
+    TEST_ASSERT(fclose(errors) == 0 && fclose(output) == 0);
+
+    TEST_ASSERT(run_app(idle_arguments, 7, "invalid\n", &output, &errors) ==
+                EXIT_CODE_INPUT);
+    text = stream_text(output);
+    error_text = stream_text(errors);
+    TEST_ASSERT(text != NULL && text[0] == '\0');
+    TEST_ASSERT(error_text != NULL && error_text[0] != '\0');
+    free(error_text);
+    free(text);
+    TEST_ASSERT(fclose(errors) == 0 && fclose(output) == 0);
+
+    TEST_ASSERT(run_app(help_json, 3, input_text, &output, &errors) == 0);
+    text = stream_text(output);
+    TEST_ASSERT(text != NULL && strstr(text, "Usage:") != NULL &&
+                strstr(text, "\"schemaVersion\"") == NULL);
+    free(text);
+    TEST_ASSERT(fclose(errors) == 0 && fclose(output) == 0);
+}
+
 void run_app_tests(void)
 {
     test_individual_algorithms_and_all();
     test_seed_reproducibility_and_errors();
+    test_json_application_output();
 }

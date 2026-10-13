@@ -16,6 +16,7 @@ void run_round_robin_tests(void);
 void run_metrics_tests(void);
 void run_output_tests(void);
 void run_app_tests(void);
+void run_json_output_tests(void);
 
 int main(void)
 {
@@ -33,6 +34,7 @@ int main(void)
     run_metrics_tests();
     run_output_tests();
     run_app_tests();
+    run_json_output_tests();
 
     if (test_failures != 0) {
         fprintf(stderr, "%d test assertion(s) failed.\n", test_failures);

@@ -5,8 +5,8 @@
 O projeto implementa em C17 um simulador de escalonamento de CPU para os sete
 algoritmos previstos no enunciado da disciplina: FCFS, SJF, SRTF, prioridades
 com e sem preempção, Round-Robin e Round-Robin com prioridade e aging. O escopo
-atual compreende o núcleo em C, entrada textual, métricas, relatório textual e
-testes. Não há modo JSON, servidor, interface web, animações ou gráficos.
+atual compreende o núcleo em C, entrada textual, métricas, relatórios textual e
+JSON e testes. Não há servidor, interface web, animações ou gráficos.
 
 ## 2. Requisitos interpretados
 
@@ -30,7 +30,8 @@ flowchart TD
 
 `app` coordena a leitura, a seed, o algoritmo e a saída. Cada algoritmo cria
 uma `Simulation` independente a partir da mesma `ProcessList` de origem. Ao
-terminar, `metrics` verifica o resultado, e `output` o transforma em texto.
+terminar, `metrics` verifica o resultado, e `output` ou `json_output` o
+serializa.
 `main` apenas conecta a aplicação a `stdin`, `stdout` e `stderr`.
 
 ## 4. Módulos
@@ -50,6 +51,7 @@ terminar, `metrics` verifica o resultado, e `output` o transforma em texto.
 | `scheduler` | implementação dos sete algoritmos |
 | `metrics` | validação final, métricas e trocas de contexto |
 | `output` | título, métricas, parâmetros e tabela temporal |
+| `json_output` | serialização JSON do resultado já calculado |
 | `app` | integração executável e escolha do algoritmo |
 | `main` | ponto de entrada do processo |
 
@@ -223,15 +225,40 @@ normal é escrita em `stdout`; diagnósticos são escritos apenas em `stderr`.
 Falhas encerram a execução do algoritmo e percorrem os caminhos de limpeza das
 estruturas já inicializadas.
 
-## 14. Testes
+## 14. Saída JSON
+
+`--json` seleciona o formato JSON; sem a opção, a saída textual permanece
+inalterada. A CLI guarda esse estado em `OutputFormat`. O schema tem versão
+inteira `1`, seed decimal em string, configuração completa e um array de um ou
+sete algoritmos na ordem usual. Os IDs estáveis são `fcfs`, `sjf`, `srtf`,
+`priority-np`, `priority-p`, `rr` e `priority-rr`.
+
+O serializador não executa algoritmos nem recalcula métricas. Ele recebe a
+`Simulation` concluída e o `MetricsReport`, preserva a ordem dos processos e
+emite os timestamps e a prioridade dinâmica final. Cada entrada de timeline
+tem `start`, `end` e `processId`; o ID interno zero de ociosidade torna-se
+`null` externamente. As médias usam `%.17g` após verificação de finitude, e a
+seed usa `PRIu64` entre aspas.
+
+`json_output_write_escaped_string` escapa aspas, barras invertidas, os escapes
+curtos de controle e qualquer byte abaixo de `0x20`; os textos fixos UTF-8 são
+emitidos sem transformação. O documento é terminado por newline e não contém
+vírgulas finais. Para evitar JSON parcial, `app`
+monta todo o documento em `tmpfile()`, verifica escrita e leitura, e só então
+copia o resultado para o stream de saída. Erros de algoritmo, métrica ou
+serialização deixam `stdout` vazio antes da cópia e são informados em `stderr`.
+
+## 15. Testes
 
 A suíte cobre parsing de configuração e processos, opções da CLI, estruturas
 dinâmicas, motor temporal, admissão fora de ordem, PRNG, desempates, timelines
 dos sete algoritmos, prioridades, fronteiras do quantum, aging, métricas,
 trocas de contexto, saída textual e integração da aplicação. Casos de erro
-verificam também códigos de retorno e separação entre `stdout` e `stderr`.
+verificam também códigos de retorno e separação entre `stdout` e `stderr`. Os
+testes JSON abrangem schema, escaping, seed máxima, `null` para CPU ociosa,
+ordem dos algoritmos, métricas e compatibilidade do modo textual.
 
-## 15. Complexidade
+## 16. Complexidade
 
 Sejam `n` a quantidade de processos e `T` o número de segundos simulados. A
 timeline usa O(T) de memória e a lista de processos usa O(n). A simulação por
@@ -247,10 +274,10 @@ onde `q` é o tamanho da fila. A impressão da tabela e a reconstrução dos
 estados percorrem processos para cada segundo, O(T*n). O cálculo das métricas
 e a validação da timeline são O(T+n), além da alocação O(n).
 
-## 16. Decisões, limitações e extensões futuras
+## 17. Decisões, limitações e extensões futuras
 
 O desenho privilegia legibilidade, invariantes explícitos e reproduzibilidade,
 em vez de estruturas assintoticamente especializadas. Uma fila de prioridade ou
 índice por chegada poderia reduzir algumas varreduras, mas exigiria regras de
-desempate igualmente explícitas. Possíveis extensões incluem exportação JSON,
-uma interface web ou visual e gráficos; elas não fazem parte do núcleo atual.
+desempate igualmente explícitas. Possíveis extensões incluem servidor, uma
+interface web ou visual e gráficos; elas não fazem parte do núcleo atual.
